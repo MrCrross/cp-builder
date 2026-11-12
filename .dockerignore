@@ -1,0 +1,36 @@
+# Код и зависимости собираются внутри multi-stage Dockerfile (см. Dockerfile)
+.git
+.gitignore
+.env
+.env.*
+!.env.example
+docker-compose*.yaml
+compose*.yaml
+Dockerfile
+.dockerignore
+
+# Node / Composer зависимости ставятся в стейджах сборки
+node_modules
+vendor
+
+# Локальные данные и логи не попадают в образ
+storage/logs
+bootstrap/cache/*.php
+public/hot
+public/build
+public/fonts-manifest.dev.json
+
+# Тесты, документация и dev-артефакты не нужны в production-образе
+tests
+docs
+.playwright
+.idea
+.vscode
+.claude
+.agents
+
+# CI и временные файлы
+.github
+*.log
+.phpunit.cache
+coverage

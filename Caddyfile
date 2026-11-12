@@ -1,0 +1,34 @@
+# cp-builder — Caddy web server.
+# Site address целиком в CADDY_SITE_ADDRESS:
+#   dev:  http://localhost            (plain HTTP, compose.override.yaml)
+#   prod: example.com                (TLS-автоматика ACME, compose.prod.yaml)
+
+{
+	# email admin@example.org
+}
+
+{$CADDY_SITE_ADDRESS:localhost}
+
+root * /var/www/html/public
+
+encode zstd gzip
+
+# Файлы, отдаваемые напрямую: собранные Vite-ассеты и public-загрузки
+# (/storage/* — symlink на ../storage/app/public из образа, см. Dockerfile)
+@static path /build/* /storage/*
+handle @static {
+	file_server
+}
+
+# Всё остальное — Laravel
+handle {
+	rewrite index.php?{query}
+	php_fastcgi web:9000 {
+		root /var/www/html/public
+		trusted_proxies private_ranges
+	}
+}
+
+handle_errors {
+	respond "{err.status_code} {err.status_text}"
+}

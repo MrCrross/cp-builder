@@ -1,0 +1,14 @@
+# Production override. Запускать явно:
+#   docker compose -f compose.yaml -f compose.prod.yaml up -d
+# Никаких dev-bind mounts и dev-портов; образ — закреплённый registry-референс.
+
+services:
+  web:
+    image: ${CP_BUILDER_IMAGE:?set CP_BUILDER_IMAGE to the pinned registry reference}
+    build: !reset []
+    pull_policy: always
+
+  migrate:
+    image: ${CP_BUILDER_IMAGE:?set CP_BUILDER_IMAGE to the pinned registry reference}
+    build: !reset []
+    pull_policy: always

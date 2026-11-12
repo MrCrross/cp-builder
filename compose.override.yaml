@@ -1,0 +1,69 @@
+# Development override (подхватывается автоматически рядом с compose.yaml).
+# Исходники синхронизируются с контейнером; vendor и node_modules остаются
+# из образа (анонимные тома маскируют bind mount).
+
+services:
+  web:
+    build:
+      target: runtime
+    develop:
+      watch:
+        - action: sync
+          path: .
+          target: /var/www/html
+          ignore:
+            - node_modules
+            - vendor
+            - storage
+            - .git
+            - .idea
+            - .playwright
+        - action: rebuild
+          path: composer.json
+        - action: rebuild
+          path: composer.lock
+        - action: rebuild
+          path: package.json
+        - action: rebuild
+          path: package-lock.json
+    volumes:
+      - .:/var/www/html
+      - /var/www/html/vendor
+      - /var/www/html/node_modules
+      - /var/www/html/bootstrap/cache
+      - ./public:/var/www/html/public
+    environment:
+      APP_ENV: local
+      APP_DEBUG: 'true'
+    read_only: false
+
+  caddy:
+    environment:
+      CADDY_SITE_ADDRESS: http://localhost
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./public:/var/www/html/public:ro
+
+  vite:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: dev-vite
+    image: cp-builder-vite:local
+    working_dir: /var/www/html
+    command: ['sh', '-c', 'npm ci --no-audit --no-fund && npm run dev -- --host']
+    ports:
+      - '5173:5173'
+    volumes:
+      - .:/var/www/html
+      - /var/www/html/vendor
+      - /var/www/html/node_modules
+      - /var/www/html/bootstrap/cache
+    environment:
+      CHOKIDAR_USEPOLLING: 'true'
+      VITE_DEV_SERVER_ORIGIN: http://localhost:5173
+
+  mailpit:
+    image: axllent/mailpit:v1.33.1
+    ports:
+      - '8025:8025'
