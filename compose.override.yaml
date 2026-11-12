@@ -63,6 +63,16 @@ services:
       CHOKIDAR_USEPOLLING: 'true'
       VITE_DEV_SERVER_ORIGIN: http://localhost:5173
 
+  worker:
+    volumes:
+      - .:/var/www/html
+      - /var/www/html/vendor
+      - /var/www/html/node_modules
+      - /var/www/html/bootstrap/cache
+    environment:
+      APP_ENV: local
+    read_only: false
+
   mailpit:
     image: axllent/mailpit:v1.33.1
     ports:

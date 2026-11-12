@@ -10,7 +10,7 @@
     import { Form, page, router } from '@inertiajs/svelte';
     import { index as catalogIndex } from '@/routes/catalog';
     import { destroy as destroyCategory, store as storeCategory, update as updateCategory } from '@/routes/catalog/categories';
-    import { destroy as destroyItem, store as storeItem, update as updateItem } from '@/routes/catalog/items';
+    import { destroy as destroyItem, image as itemImage, store as storeItem, update as updateItem } from '@/routes/catalog/items';
     import AppHead from '@/shared/ui/AppHead.svelte';
     import Heading from '@/shared/ui/Heading.svelte';
     import { Badge } from '@/shared/ui/badge';
@@ -29,6 +29,12 @@
     const items = $derived((page.props.items as PaginatedItems) ?? { data: [], links: [] });
     const filters = $derived(page.props.filters as { search?: string; category_id?: string; active?: string });
     const canManage = $derived((page.props.auth?.permissions ?? []).includes('catalog.manage'));
+
+    function itemImageUrl(item: CatalogItemListItem): string | null {
+        if (!item.image) return null;
+        if (/^https?:\/\//.test(item.image)) return item.image;
+        return itemImage.url({ query: { path: item.image } });
+    }
 
     // -- Категории -------------------------------------------------------------
     let categoryName = $state('');
@@ -221,7 +227,24 @@
                             </div>
                         </td>
                     {:else}
-                        <td class="px-4 py-2 font-medium">{item.name}</td>
+                        <td class="px-4 py-2 font-medium">
+                            <div class="flex items-center gap-3">
+                                {#if itemImageUrl(item)}
+                                    <img src={itemImageUrl(item)} alt="" class="h-10 w-10 shrink-0 rounded border border-line object-cover" loading="lazy" />
+                                {/if}
+                                <div>
+                                    {item.name}
+                                    {#if item.source_url}
+                                        <a href={item.source_url} target="_blank" rel="noopener noreferrer" class="ml-1 text-xs text-primary underline">источник</a>
+                                    {/if}
+                                    {#if item.properties.length > 0}
+                                        <div class="text-xs font-normal text-muted-foreground" title={item.properties.map((p) => `${p.name}: ${p.value}`).join('\n')}>
+                                            {item.properties.map((p) => `${p.name}: ${p.value}`).join(' · ')}
+                                        </div>
+                                    {/if}
+                                </div>
+                            </div>
+                        </td>
                         <td class="px-4 py-2 text-muted-foreground">{item.category?.name ?? '—'}</td>
                         <td class="px-4 py-2 text-muted-foreground">{item.unit ?? '—'}</td>
                         <td class="px-4 py-2 text-right tabular-nums">{formatMoney(item.price)}</td>

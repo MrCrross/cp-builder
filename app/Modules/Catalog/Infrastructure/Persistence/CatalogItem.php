@@ -20,6 +20,11 @@ use Illuminate\Support\Carbon;
  * @property string $price
  * @property string $currency
  * @property bool $active
+ * @property string|null $source
+ * @property string|null $external_id
+ * @property list<array{name: string, value: string}>|null $properties
+ * @property string|null $image
+ * @property string|null $source_url
  * @property Carbon $created_at
  * @property Carbon $updated_at
  * @property-read CatalogCategory|null $category
@@ -43,6 +48,7 @@ class CatalogItem extends Model
         return [
             'price' => 'decimal:2',
             'active' => 'boolean',
+            'properties' => 'array',
         ];
     }
 

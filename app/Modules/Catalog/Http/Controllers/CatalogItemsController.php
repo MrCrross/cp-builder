@@ -14,6 +14,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -58,6 +59,9 @@ class CatalogItemsController extends Controller
                 'price' => $item->price,
                 'active' => $item->active,
                 'category' => $item->category ? ['id' => $item->category->id, 'name' => $item->category->name] : null,
+                'properties' => $item->properties ?? [],
+                'image' => $item->image,
+                'source_url' => $item->source_url,
             ]);
 
         return Inertia::render('catalog/CatalogPage', [
@@ -107,6 +111,22 @@ class CatalogItemsController extends Controller
             ]);
 
         return response()->json(['items' => $items]);
+    }
+
+    /**
+     * Отдача картинок импорта из storage (план §13.1): только пути вида
+     * imports/<source>/<sha256>.<ext>, авторизованным пользователям каталога.
+     */
+    public function image(Request $request): \Symfony\Component\HttpFoundation\Response
+    {
+        Gate::authorize('viewAny', CatalogItem::class);
+
+        $path = (string) $request->query('path', '');
+
+        abort_unless(preg_match('#^imports/[a-z0-9]+/[a-f0-9]{64}\.[a-z0-9]+$#i', $path) === 1, 404);
+        abort_unless(Storage::disk('local')->exists($path), 404);
+
+        return Storage::disk('local')->response($path);
     }
 
     public function store(StoreCatalogItemRequest $request, CreateCatalogItemAction $action): RedirectResponse

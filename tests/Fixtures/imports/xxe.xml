@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE yml_catalog [
+  <!ENTITY xxe SYSTEM "file:///etc/passwd">
+]>
+<yml_catalog date="2026-11-12T16:00:02+08:00">
+  <shop>
+    <name>&xxe;</name>
+    <company>ООО «Пример Шоп»</company>
+    <url>https://example.test</url>
+    <currencies>
+      <currency id="RUR" rate="1"/>
+    </currencies>
+    <categories>
+      <category id="10">Категория пример</category>
+    </categories>
+    <offers>
+      <offer id="2001" type="vendor.model" available="true">
+        <price>100</price>
+        <currencyId>RUR</currencyId>
+        <categoryId>10</categoryId>
+        <name>Позиция с XXE пример</name>
+      </offer>
+    </offers>
+  </shop>
+</yml_catalog>

@@ -9,6 +9,7 @@ use App\Modules\CommercialProposals\Http\Controllers\ProposalTemplatesController
 use App\Modules\CommercialProposals\Http\Controllers\PublicProposalController;
 use App\Modules\CompanySettings\Http\Controllers\BrandingAssetController;
 use App\Modules\CompanySettings\Http\Controllers\OrganizationSettingsController;
+use App\Modules\Imports\Http\Controllers\ImportsController;
 use App\Modules\Projects\Http\Controllers\ProjectsController;
 use App\Modules\Statistics\Http\Controllers\StatisticsController;
 use Illuminate\Support\Facades\Route;
@@ -64,6 +65,7 @@ Route::middleware(['auth'])->group(function () {
     // Номенклатура: плоские категории и позиции (план §8.2).
     Route::get('catalog', [CatalogItemsController::class, 'index'])->name('catalog.index');
     Route::get('catalog/items/search', [CatalogItemsController::class, 'search'])->name('catalog.items.search');
+    Route::get('catalog/items/image', [CatalogItemsController::class, 'image'])->name('catalog.items.image');
     Route::post('catalog/categories', [CatalogCategoriesController::class, 'store'])->name('catalog.categories.store');
     Route::put('catalog/categories/{category}', [CatalogCategoriesController::class, 'update'])->name('catalog.categories.update');
     Route::delete('catalog/categories/{category}', [CatalogCategoriesController::class, 'destroy'])->name('catalog.categories.destroy');
@@ -73,6 +75,14 @@ Route::middleware(['auth'])->group(function () {
 
     // Статистика просмотров КП (план §13.5): administrator/manager, viewer — нет.
     Route::get('statistics', [StatisticsController::class, 'index'])->name('statistics.index');
+
+    // Импорты номенклатуры (план §13.1): permission imports.run.
+    Route::get('imports', [ImportsController::class, 'index'])->name('imports.index');
+    Route::post('imports', [ImportsController::class, 'store'])->name('imports.store');
+    Route::get('imports/{job}', [ImportsController::class, 'show'])->name('imports.show');
+    Route::post('imports/{job}/confirm', [ImportsController::class, 'confirm'])->name('imports.confirm');
+    Route::post('imports/{job}/cancel', [ImportsController::class, 'cancel'])->name('imports.cancel');
+    Route::get('imports/{job}/errors.csv', [ImportsController::class, 'errors'])->name('imports.errors');
 
     Route::prefix('admin')->name('admin.')->group(function () {
         Route::get('users', [UsersController::class, 'index'])->name('users.index');

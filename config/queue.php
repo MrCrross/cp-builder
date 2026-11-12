@@ -40,7 +40,9 @@ return [
             'connection' => env('DB_QUEUE_CONNECTION'),
             'table' => env('DB_QUEUE_TABLE', 'jobs'),
             'queue' => env('DB_QUEUE', 'default'),
-            'retry_after' => (int) env('DB_QUEUE_RETRY_AFTER', 90),
+            // Импортные job'ы разбирают до 512 МБ XML: timeout job'ов 1800 c,
+            // retry_after обязан быть больше (план §13.1 п.7).
+            'retry_after' => (int) env('DB_QUEUE_RETRY_AFTER', 1900),
             'after_commit' => false,
         ],
 

@@ -17,6 +17,9 @@ export interface CatalogItemListItem {
     price: string;
     active: boolean;
     category: { id: number; name: string } | null;
+    properties: { name: string; value: string }[];
+    image: string | null;
+    source_url: string | null;
 }
 
 export interface CatalogItemOption {

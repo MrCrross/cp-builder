@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE yml_catalog SYSTEM "shops.dtd">
+<yml_catalog date="2026-11-12T16:00:02+08:00">
+  <shop>
+    <name>Пример Шоп</name>
+    <company>ООО «Пример Шоп»</company>
+    <url>https://example.test</url>
+    <platform>BSM/Yandex/Market</platform>
+    <version>3.3.0</version>
+    <currencies>
+      <currency id="RUR" rate="1"/>
+    </currencies>
+    <categories>
+      <category id="10">Часы наручные</category>
+      <category id="20" parentId="10">Часы кварцевые</category>
+    </categories>
+    <offers>
+      <offer id="1001" type="vendor.model" available="true">
+        <url>https://example.test/item/1001</url>
+        <price>12500</price>
+        <oldprice>15000</oldprice>
+        <currencyId>RUR</currencyId>
+        <categoryId>20</categoryId>
+        <picture>https://example.test/img/1001.jpg</picture>
+        <name>Часы пример кварцевые</name>
+        <vendor>ПримерБренд</vendor>
+        <model>PB-100</model>
+        <typePrefix>Часы</typePrefix>
+        <description>Тестовые часы с кварцевым механизмом</description>
+        <sales_notes>Оплата при получении</sales_notes>
+        <barcode>4600000000017</barcode>
+        <param name="Артикул">ART-1001</param>
+        <param name="Водостойкость">0</param>
+        <param name="Цвет">серебристый</param>
+        <count>5</count>
+        <name>Часы пример кварцевые</name>
+      </offer>
+      <offer id="1002" type="vendor.model" available="false">
+        <url>https://example.test/item/1002</url>
+        <price>990.90</price>
+        <currencyId>RUB</currencyId>
+        <categoryId>10</categoryId>
+        <picture>https://example.test/img/1002.jpg</picture>
+        <vendor>ПримерБренд</vendor>
+        <model>PB-200</model>
+        <param name="Артикул">ART-1002</param>
+        <count>0</count>
+      </offer>
+    </offers>
+  </shop>
+</yml_catalog>

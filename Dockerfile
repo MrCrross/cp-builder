@@ -101,6 +101,11 @@ COPY --from=frontend /var/www/html/public/build ./public/build
 RUN mkdir -p storage/framework/{cache,sessions,views} storage/logs bootstrap/cache \
     && chown -R www-data:www-data storage bootstrap/cache
 
+# XML/YML-импорт (план §13.1): выгрузки до 512 МБ (YML-эталон — 197 МБ).
+# Разбор потоковый — memory_limit не трогаем.
+RUN echo 'upload_max_filesize=512M\npost_max_size=528M' \
+    > /usr/local/etc/php/conf.d/cp-builder-uploads.ini
+
 # Symlink for serving public uploads (storage/app/public) via Caddy
 RUN php artisan storage:link --no-interaction || true
 

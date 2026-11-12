@@ -83,6 +83,34 @@ services:
     command: ['php', 'artisan', 'migrate', '--seed', '--force']
     restart: 'no'
 
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runtime
+    image: cp-builder-web:local
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_CONNECTION: pgsql
+      DB_DATABASE: ${DB_DATABASE:-cpbuilder}
+      DB_USERNAME: ${DB_USERNAME:-cpbuilder}
+      DB_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD in .env}
+    volumes:
+      - app-storage:/var/www/html/storage
+      - app-public:/var/www/html/public
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /run
+    command: ['php', 'artisan', 'queue:work', '--queue=imports,default', '--sleep=1', '--tries=3', '--max-time=3600']
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
   caddy:
     image: caddy:2.10.2
     restart: unless-stopped

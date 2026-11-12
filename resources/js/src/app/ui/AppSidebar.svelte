@@ -21,11 +21,12 @@
     import { dashboard } from '@/routes';
     import { edit as brandingEdit } from '@/routes/settings/branding';
     import { index as catalogIndex } from '@/routes/catalog';
+    import { index as importsIndex } from '@/routes/imports';
     import { index as proposalsIndex } from '@/routes/proposals';
     import { index as projectsIndex } from '@/routes/projects';
     import { index as statisticsIndex } from '@/routes/statistics';
     import { index as templatesIndex } from '@/routes/templates';
-    import { Building2, FileText, FolderKanban, LayoutTemplate, Package } from '@lucide/svelte';
+    import { Building2, FileText, FolderKanban, LayoutTemplate, Package, Upload } from '@lucide/svelte';
     import BarChart3 from '@lucide/svelte/icons/bar-chart-3';
     import type { NavItem } from '@/app/lib/navigation';
 
@@ -66,6 +67,14 @@
                 title: 'Номенклатура',
                 href: catalogIndex(),
                 icon: Package,
+            });
+        }
+
+        if (permissions.includes('imports.run')) {
+            items.push({
+                title: 'Импорты',
+                href: importsIndex(),
+                icon: Upload,
             });
         }
 
