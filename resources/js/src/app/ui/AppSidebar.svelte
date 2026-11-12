@@ -20,9 +20,13 @@
     import admin from '@/routes/admin';
     import { dashboard } from '@/routes';
     import { edit as brandingEdit } from '@/routes/settings/branding';
+    import { index as catalogIndex } from '@/routes/catalog';
     import { index as proposalsIndex } from '@/routes/proposals';
+    import { index as projectsIndex } from '@/routes/projects';
+    import { index as statisticsIndex } from '@/routes/statistics';
     import { index as templatesIndex } from '@/routes/templates';
-    import { Building2, FileText, LayoutTemplate } from '@lucide/svelte';
+    import { Building2, FileText, FolderKanban, LayoutTemplate, Package } from '@lucide/svelte';
+    import BarChart3 from '@lucide/svelte/icons/bar-chart-3';
     import type { NavItem } from '@/app/lib/navigation';
 
     let {
@@ -49,11 +53,35 @@
             });
         }
 
+        if (permissions.includes('projects.view')) {
+            items.push({
+                title: 'Проекты',
+                href: projectsIndex(),
+                icon: FolderKanban,
+            });
+        }
+
+        if (permissions.includes('catalog.view')) {
+            items.push({
+                title: 'Номенклатура',
+                href: catalogIndex(),
+                icon: Package,
+            });
+        }
+
         if (permissions.includes('templates.manage')) {
             items.push({
                 title: 'Шаблоны',
                 href: templatesIndex(),
                 icon: LayoutTemplate,
+            });
+        }
+
+        if (permissions.includes('statistics.view')) {
+            items.push({
+                title: 'Статистика',
+                href: statisticsIndex(),
+                icon: BarChart3,
             });
         }
 

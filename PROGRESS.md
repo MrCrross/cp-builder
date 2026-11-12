@@ -1,6 +1,6 @@
 # PROGRESS — прогресс по docs/implementation-plan.md
 
-Последнее обновление: 2026-11-12 (завершение этапа 3, кроме оговорённых исключений).
+Последнее обновление: 2026-11-12 (завершение этапа 7).
 
 ## Сводка по этапам
 
@@ -9,11 +9,11 @@
 | 0 | Подготовка и архитектурные решения | ✅ выполнен (аудит `docs/legacy-audit.md`, план утверждён) |
 | 1 | Базовый каркас, окружение и CI | ✅ выполнен |
 | 2 | Аутентификация, RBAC и аудит | ✅ выполнен |
-| 3 | White-label и основной MVP КП | 🟡 почти выполнен — остались migration tooling и Editor.js-виджет (см. «Отклонения») |
-| 4 | Проекты и номенклатура | ⬜ не начат |
+| 3 | White-label и основной MVP КП | ✅ выполнен (отклонения закрыты: ADR-0009, ADR-0010) |
+| 4 | Проекты и номенклатура | ✅ выполнен |
 | 5 | XML/YML-импорт | ⬜ не начат |
 | 6 | Bitrix24 и 1С | ⬜ не начат |
-| 7 | Модуль статистики | ⬜ не начат |
+| 7 | Модуль статистики | ✅ выполнен (privacy-решения — ADR-0011) |
 | 8 | Дальнейшее развитие | ⬜ не начат |
 
 ## Этап 1 — каркас (выполнен)
@@ -30,7 +30,7 @@
 - Роли manager/viewer/administrator + Permissions + Policies; admin users (деактивация), Audit Log UI.
 - Security headers, request ID/redaction.
 
-## Этап 3 — white-label и MVP КП (выполнен, кроме отклонений)
+## Этап 3 — white-label и MVP КП (выполнен; отклонения закрыты ADR-0009/ADR-0010)
 
 Сделано:
 
@@ -50,16 +50,55 @@
 
 ### Отклонения и открытые вопросы этапа 3
 
-1. **Editor.js npm-виджет не интегрирован.** Custom-секции редактируются структурированными инпутами, пишущими тот же block-JSON (paragraph/header/list/table), который валидируется на save и рендерится strict-рендерером. Обоснование: vertical slice «сначала простое КП» (§17 риски этапа 3); виджет требует новых npm-зависимостей. Допускается планом §5.5, но требует утверждения владельца.
-2. **Migration tooling не начинался** (§12): команды импорта с dry-run/idempotency и synthetic fixtures. §12.1 гейтит реальную миграцию на одобрение владельца. Это оставшаяся часть этапа 3.
+1. ~~Editor.js npm-виджет не интегрирован~~ — **закрыто решением владельца (2026-11-12)**: структурированные инпуты признаны постоянным решением, Editor.js не интегрируется (ADR-0009).
+2. ~~Migration tooling не начинался~~ — **отменено владельцем (2026-11-12)**: перенос данных kp-constructor-ff не требуется, §12 не разрабатывается (ADR-0010). `public_link_aliases`/`/kp/{slug}` остаются без источника данных.
 3. Триггер иммутабельности issued — pgsql-only (тесты бегут на sqlite и покрывают application-уровень).
-4. `catalog_item_id`/`project_id` — без FK до этапа 4.
+4. `catalog_item_id`/`project_id` — FK добавлены на этапе 4.
 5. SMTP тестовый (Mailpit); продакшен-почта не настраивалась.
 6. CI GitHub не прогонялся в этой сессии (workflow этапа 1 на месте).
-7. В dev-БД остались синтетические данные приёмки (ООО «Тест Полимер», КП KP-2026-00001/00002, логотип).
+7. В dev-БД остались синтетические данные приёмки (ООО «Тест Полимер», КП, логотип) и e2e-прогонов.
+
+## Этап 4 — проекты и номенклатура (выполнен)
+
+Сделано:
+
+- **Projects** (`app/Modules/Projects`): projects (name, client_name, client_contact, created_by); миграция + FK `proposals.project_id` restrict; CRUD-экшены с audit (`project.*`); ProjectPolicy (viewer read-only через новые permissions `projects.view`/`projects.manage` в BaselineSeeder); страницы «Проекты» (поиск, пагинация, inline-редактирование) и «Проект» (клиентские данные, список КП, «Новое КП» с привязкой).
+- **Catalog** (`app/Modules/Catalog`): плоские catalog_categories + catalog_items (price decimal(20,2), currency RUB check, active); FK restrict: категория с позициями и позиция с историей в КП не удаляются (понятные 409 на application-уровне вместо ошибки БД), вывод — active=false; Money-нормализация цен; CRUD + Policy (`catalog.view`/`catalog.manage`); страница «Номенклатура» (категории-бейджи, поиск, фильтры, inline-редактирование, включение/отключение).
+- **Snapshot-связи** (план §7.3): `proposal_items.catalog_item_id` — теперь FK к catalog_items; lineage переживает сохранение черновика (исправлен обрыв в рандеву фронт↔backend: `catalog_item_id` добавлен в payload редактора и DTO); порт `CatalogItemLookupPort` + DTO `CatalogItemSnapshot` (CommercialProposals не импортирует Eloquent Catalog; реализация `CatalogItemLookup` в модуле Catalog).
+- **Явное обновление из справочника**: `DraftCatalogDiffAction` (GET `proposals/{id}/catalog-diff`, JSON diff по name/unit/price связанных строк) и `RefreshDraftItemsFromCatalogAction` (POST `proposals/{id}/refresh-catalog` — обновляет только связанные строки draft, пересчитывает amounts/totals, бампит lock_version, audit `proposal.catalog-refreshed`); в редакторе кнопки «Из справочника» (picker: JSON-поиск активных позиций) и «Обновить из справочника» (панель diff → подтверждение → применение); селектор «Проект» в редакторе (`project_id` в SaveDraftAction, валидируется exists).
+- **Приёмка WebBridge** (реальный браузер, dev-контур на pgsql): проект → КП из проекта (проект подтянут в селектор) → позиция из справочника → save (lineage в БД = 1) → цена в каталоге 1500→1800 (черновик не изменился) → diff показал расхождение → применение: строка 1800.00, итог серверный пересчитан.
+
+Проверки (финал этапа): **Pest 172 passed (601 assertions)**, PHPStan 0 errors, Pint PASS (181 файлов), svelte-check 0 errors, `vp check` pass, production `vite build` успешен. Миграции применены на dev-PostgreSQL, BaselineSeeder дозирован (idempotent).
+
+### Отклонения и замечания этапа 4
+
+1. ~~Playwright e2e-тесты не закреплены~~ — **снято**: заведён Playwright Test (`@playwright/test` ^1.65, `playwright.config.ts`, `tests-e2e/`): auth (guest→login, viewer UI-hidden + direct POST 403) и критический путь «проект → КП → позиция из справочника → diff → refresh». Прогон: `npm run test:e2e` против dev-контура (3 passed). Зависимость записана в `docs/dependencies.md`.
+2. Tailwind-токен `line` из плана §11.3 не был заведён в `@theme` — класс `border-line` (48 использований) не генерировался. Исправлено: `--color-line` в `app.css`; production build проверен (`.border-line` генерируется).
+3. Cross-module связи: `Project::proposals()`/`Proposal::project()` и доменный VO `Money` используются модулем Catalog — прагматичное отклонение от правила §6.1 (FK-связи и единый Money VO); порт введён для каталога, для проектов связь только реляционная.
+4. В dev-БД остались smoke-данные приёмки и e2e-прогонов (уникальные имена с меткой E2E, синтетика).
+
+## Этап 7 — модуль статистики (выполнен; privacy-решения закрыты ADR-0011)
+
+Сделано:
+
+- **Privacy-базовая линия (ADR-0011)**: только дневные агрегаты, никакого PII — колонок IP/UA/deviceId нет структурно; unique visitors = вращающийся ежедневный salted HMAC (`дата|КП|ip|ua`), без cookie; список просмотров не реализуется (дефолт плана §13.5); retention: raw buffer 3 дня, агрегаты 730 дней; доступ administrator/manager (`statistics.view`), viewer — нет.
+- **Модуль** (`app/Modules/Statistics`): миграция `statistics_*` (raw visits, daily_proposals, daily_uniques — дедуп-сет, daily_dimensions — device_type/os, meta — свежесть); доменные классификаторы UA без внешних зависимостей (`BotClassifier`, `DeviceClassifier`, `OsClassifier`, enum `DimensionType`); `RecordProposalVisitAction` — синхронная запись в одной транзакции (upsert агрегатов, insertOrIgnore дедупа, разбивки, meta); `PruneStatisticsAction` + `statistics:prune` (daily по расписанию); `StatisticsController` — чтение ТОЛЬКО из агрегатов (totals, time series с zero-fill, breakdowns SUM-группировкой, пер-КП таблица top-50, фильтры period 7/30/90 и `?proposal_id=`, freshness).
+- **Интеграция**: трекинг в `PublicProposalController` при успешном показе issued (token и slug), rescue+report — сбой статистики не ломает `/kp/{token}`; выключатель `statistics.enabled`; повторный показ логотипа не трекается.
+- **Фронт**: страница «Статистика» (`pages/statistics/StatisticsPage`): карточки totals, CSS bar-chart просмотров/уников по дням, разбивки устройства/ОС с долями, таблица КП со ссылками в редактор, фильтры, индикатор свежести; пункт сайдбара по permission; DTO `shared/api/statistics.ts`.
+- **Тесты**: Pest 40 новых (классификаторы, агрегация/дедуп/боты/границы дней, трекинг только issued и только валидный token, disabled-конфиг, отсутствие PII-колонок, дашборд — auth/viewer 403/totals/фильтры/fallback периода, prune retention); Playwright e2e «выпуск → 2 просмотра → дашборд» (подмена HeadlessChrome-UA, т.к. headless-браузеры честно классифицируются как боты).
+
+Проверки (финал этапа): **Pest 212 passed (739 assertions)**, PHPStan 0 errors, Pint PASS (203 файла), svelte-check 0 errors, `vp check` pass (76 файлов), production `vite build` успешен. Миграции и BaselineSeeder применены на dev-PostgreSQL. E2E: 4 passed.
+
+### Отклонения и замечания этапа 7
+
+1. **Найден и исправлен pre-existing баг**: кнопка «Новое КП» в реестре (`proposals-index`) была `<button href=…>` (Button без asChild — href игнорировался, навигация не работала). Исправлено на `Button asChild` + `<a>`. E2e этапа 4 его не покрывал (создание шло из карточки проекта).
+2. Throttle на трекинг не вводился (боты учитываются отдельным счётчиком, raw сгорает по TTL) — отдельное решение при реальной нагрузке (ADR-0011).
+3. Сквозные (междусуточные) uniques недоступны — осознанная цена отказа от persistent id; разбивки device/OS считаются по visits (не по уникам).
+4. В dev-БД остались smoke-данные прогонов e2e (синтетика с меткой E2E).
+5. Перенос legacy `kp_visits` — только по отдельному запросу и только агрегатами (12.2), не делался.
 
 ## Следующие шаги
 
-1. Утвердить отклонения этапа 3 (Editor.js-виджет, объём migration tooling).
-2. Migration tooling (dry-run/idempotency, synthetic fixtures) — закрыть этап 3.
-3. Этап 4: Projects CRUD + справочник номенклатуры, snapshot-связи позиций.
+1. Этап 5: XML/YML-импорт — материалы §13.4 получены 2026-11-12 и разобраны в `docs/imports-stage5-reference.md` (CommerceML 3.1 с реального сервера + полная YML-выгрузка, образцы локально в `docs/examples/`). До старта: решения владельца по mapping (reference §3: категории, картинки, остатки, whitelist свойств, цена, фикстуры).
+2. §6 (Bitrix24/1С) — только после test portal и примеров выгрузок.
+3. Этап 8 — по мере подтверждённой потребности и ADR.

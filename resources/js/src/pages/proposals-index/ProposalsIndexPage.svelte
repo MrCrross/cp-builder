@@ -69,7 +69,11 @@
     <div class="flex items-start justify-between gap-4">
         <Heading variant="small" title="Коммерческие предложения" description="Реестр документов: черновики, выпуск, архив." />
         {#if canMutate}
-            <Button href={create.url()} data-test="create-proposal">Новое КП</Button>
+            <Button asChild data-test="create-proposal">
+                {#snippet children(props)}
+                    <a {...props} href={create.url()}>Новое КП</a>
+                {/snippet}
+            </Button>
         {/if}
     </div>
 

@@ -7,6 +7,8 @@ use App\Modules\CommercialProposals\Domain\ProposalStatus;
 use App\Modules\CommercialProposals\Infrastructure\Persistence\Proposal;
 use App\Modules\CommercialProposals\Infrastructure\Persistence\PublicLink;
 use App\Modules\CommercialProposals\Infrastructure\Persistence\PublicLinkAlias;
+use App\Modules\Statistics\Application\Actions\RecordProposalVisitAction;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
@@ -18,7 +20,11 @@ use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
  */
 class PublicProposalController extends Controller
 {
-    public function show(string $token): Response
+    public function __construct(
+        private readonly RecordProposalVisitAction $recordVisit,
+    ) {}
+
+    public function show(Request $request, string $token): Response
     {
         [$proposal, $link] = $this->resolve($token);
 
@@ -28,6 +34,8 @@ class PublicProposalController extends Controller
             // Выпущенная версия отсутствует (draft или inconsistent state).
             throw new NotFoundHttpException;
         }
+
+        $this->trackVisit($request, $proposal);
 
         return response()->view('proposals.document', [
             'proposal' => $proposal,
@@ -123,6 +131,8 @@ class PublicProposalController extends Controller
     ): Response {
         $version = $proposal->issuedVersion()->with(['items', 'sections'])->firstOrFail();
 
+        $this->trackVisit(request(), $proposal);
+
         // Для alias логотипы недоступны по token-URL; документ рендерится
         // без них (безопасный fallback — §12.2).
         return response()->view('proposals.document', [
@@ -130,5 +140,21 @@ class PublicProposalController extends Controller
             'version' => $version,
             'publicToken' => null,
         ])->header('Cache-Control', 'no-store');
+    }
+
+    /**
+     * Фиксация просмотра issued-документа (план §13.5): модуль Statistics
+     * не должен ломать публичный рендер — сбой трекинга только репортится.
+     */
+    private function trackVisit(Request $request, Proposal $proposal): void
+    {
+        rescue(
+            fn () => $this->recordVisit->execute(
+                $proposal,
+                $request->ip(),
+                $request->userAgent(),
+            ),
+            report: true,
+        );
     }
 }

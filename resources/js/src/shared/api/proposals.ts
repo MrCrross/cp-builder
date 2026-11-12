@@ -18,6 +18,7 @@ export interface ProposalListItem {
 }
 
 export interface ProposalItemInput {
+    catalog_item_id: number | null;
     name: string;
     description: string | null;
     unit: string | null;
@@ -68,6 +69,7 @@ export interface ProposalEditPayload {
     number: string | null;
     status: ProposalStatus;
     template_id: number | null;
+    project_id: number | null;
     has_public_link: boolean;
     preview_url: string;
     draft: ProposalDraftData | null;
@@ -91,6 +93,16 @@ export interface ProposalTemplateListItem {
 export interface IssuedFlash {
     url: string;
     token: string;
+}
+
+/** Отличие snapshot-строки черновика от актуального справочника. */
+export interface CatalogDiffEntry {
+    position: number;
+    catalog_item_id: number;
+    name: { current: string; catalog: string };
+    unit: { current: string | null; catalog: string | null };
+    unit_price: { current: string; catalog: string };
+    changed: boolean;
 }
 
 /** Десятичная строка → локальный формат сумм; только отображение. */

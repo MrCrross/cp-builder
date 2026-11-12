@@ -6,6 +6,7 @@ use App\Modules\CommercialProposals\CommercialProposalsServiceProvider;
 use App\Modules\CompanySettings\CompanySettingsServiceProvider;
 use App\Modules\Identity\IdentityServiceProvider;
 use App\Modules\Projects\ProjectsServiceProvider;
+use App\Modules\Statistics\StatisticsServiceProvider;
 use App\Providers\AppServiceProvider;
 use App\Providers\FortifyServiceProvider;
 
@@ -19,5 +20,6 @@ return [
     ProjectsServiceProvider::class,
     CatalogServiceProvider::class,
     CommercialProposalsServiceProvider::class,
+    StatisticsServiceProvider::class,
     AuditLogServiceProvider::class,
 ];

@@ -27,11 +27,14 @@ class BaselineSeeder extends Seeder
             'proposals.restore',
             'proposals.rotate-link',
             'templates.manage',
+            'projects.view',
             'projects.manage',
+            'catalog.view',
             'catalog.manage',
             'branding.manage',
             'users.manage',
             'audit.view',
+            'statistics.view',
             'imports.run',
             'integrations.manage',
         ])->mapWithKeys(fn (string $name) => [$name => Permission::findOrCreate($name)]);
@@ -51,14 +54,21 @@ class BaselineSeeder extends Seeder
                     'proposals.restore',
                     'proposals.rotate-link',
                     'templates.manage',
+                    'projects.view',
                     'projects.manage',
+                    'catalog.view',
                     'catalog.manage',
+                    'statistics.view',
                     'imports.run',
                 ])->values(),
             );
 
         Role::findOrCreate('viewer')
-            ->givePermissionTo([$permissions['proposals.view']]);
+            ->givePermissionTo([
+                $permissions['proposals.view'],
+                $permissions['projects.view'],
+                $permissions['catalog.view'],
+            ]);
 
         app(PermissionRegistrar::class)->forgetCachedPermissions();
     }
