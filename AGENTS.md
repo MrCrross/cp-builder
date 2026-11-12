@@ -18,6 +18,8 @@
 
 ## Проверки (через Docker, из корня репо)
 
+**PHP и Composer на host НЕ установлены** — любые `php artisan ...`, `composer ...`, `tinker`-вызовы гонять ТОЛЬКО через Docker (ниже или `docker compose exec -T web php artisan ...` для dev-контура). Прямой вызов `php` в shell не сработает.
+
 ```bash
 # PHP: тесты / статанализ / стиль (образ cp-builder-test:local, sqlite :memory:)
 MSYS_NO_PATHCONV=1 docker run --rm -v "//c/Users/stas/Desktop/projects/cp-builder:/app" -w /app cp-builder-test:local php vendor/bin/pest
@@ -28,7 +30,17 @@ MSYS_NO_PATHCONV=1 docker run --rm -v "//c/Users/stas/Desktop/projects/cp-builde
 MSYS_NO_PATHCONV=1 docker run --rm -e LARAVEL_BYPASS_ENV_CHECK=1 -v "//c/Users/stas/Desktop/projects/cp-builder:/app" -w /app node:24-trixie-slim npx svelte-check --tsconfig ./tsconfig.json
 MSYS_NO_PATHCONV=1 docker run --rm -e LARAVEL_BYPASS_ENV_CHECK=1 -v "//c/Users/stas/Desktop/projects/cp-builder:/app" -w /app node:24-trixie-slim npx vp check
 docker compose exec -T vite npx vite build   # production build
+
+# E2E (Playwright): против поднятого dev/staging-контура (synthetic-seeds, manager@example.test/password123).
+# node_modules в репо — linux-сборка: npm-скрипт `npm run test:e2e` идёт через node напрямую и работает и на Windows-host.
+npm run test:e2e
+
+# Прочие artisan-команды (wayfinder, migrate, db:seed и т.п.) — так же через docker:
+MSYS_NO_PATHCONV=1 docker run --rm -v "//c/Users/stas/Desktop/projects/cp-builder:/app" -w /app cp-builder-test:local php artisan wayfinder:generate --with-form
+# tinker в compose-контейнере web требует HOME: docker compose exec -T -e HOME=/tmp web php artisan tinker --execute='...'
 ```
+
+**Важно про node_modules**: одна bind-mounted установка обслуживает и linux-контейнеры, и Windows-host. Нативные пакеты (vite-plus) ставятся для linux (`npm ci` выполнять в node:24-trixie-slim-контейнере, НЕ на host) — на host npm-скрипты с нативными бинарями не работают; чисто-JS инструменты (Playwright) работают.
 
 ## Правила
 

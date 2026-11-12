@@ -3,6 +3,7 @@
 namespace App\Modules\CommercialProposals\Infrastructure\Persistence;
 
 use App\Modules\CommercialProposals\Domain\ProposalStatus;
+use App\Modules\Projects\Infrastructure\Persistence\Project;
 use Database\Factories\ProposalFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -14,6 +15,7 @@ use Illuminate\Support\Carbon;
 /**
  * @property int $id
  * @property int|null $template_id
+ * @property int|null $project_id
  * @property int $owner_id
  * @property string|null $number
  * @property int|null $year
@@ -52,6 +54,17 @@ class Proposal extends Model
     public function template(): BelongsTo
     {
         return $this->belongsTo(ProposalTemplate::class, 'template_id');
+    }
+
+    /**
+     * Проект группировки (модуль Projects, план §8.2); FK restrict —
+     * проект с КП не удаляется.
+     *
+     * @return BelongsTo<Project, $this>
+     */
+    public function project(): BelongsTo
+    {
+        return $this->belongsTo(Project::class, 'project_id');
     }
 
     /**

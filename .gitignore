@@ -44,6 +44,9 @@ yarn-error.log
 
 # Артефакты браузерной автоматизации (playwright-cli)
 /.playwright-cli/
+# Playwright Test (tests-e2e)
+/playwright-report/
+/test-results/
 
 # Проектная документация (ADR, планы, ранбуки — локальные рабочие материалы)
 /docs/

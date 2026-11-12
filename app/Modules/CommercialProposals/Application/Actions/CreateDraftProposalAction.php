@@ -19,7 +19,7 @@ use Illuminate\Support\Facades\DB;
 final class CreateDraftProposalAction
 {
     /**
-     * @param  array{title?: string, subtitle?: ?string, client_name?: ?string, client_contact?: ?string, manager_name?: ?string, manager_email?: ?string, manager_phone?: ?string, note?: ?string}  $data
+     * @param  array{title?: string, subtitle?: ?string, client_name?: ?string, client_contact?: ?string, manager_name?: ?string, manager_email?: ?string, manager_phone?: ?string, note?: ?string, project_id?: ?int}  $data
      */
     public function execute(User $actor, ?int $templateId = null, array $data = []): Proposal
     {
@@ -28,6 +28,7 @@ final class CreateDraftProposalAction
         return DB::transaction(function () use ($actor, $template, $data) {
             $proposal = Proposal::query()->create([
                 'template_id' => $template?->id,
+                'project_id' => $data['project_id'] ?? null,
                 'owner_id' => $actor->id,
                 'status' => ProposalStatus::Draft,
             ]);
@@ -67,6 +68,7 @@ final class CreateDraftProposalAction
             Audit::record($actor, 'proposal.created', $proposal, [], [
                 'template' => $template?->name,
                 'title' => $version->title,
+                'project' => $proposal->project?->name,
             ]);
 
             return $proposal;

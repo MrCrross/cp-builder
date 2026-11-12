@@ -2,6 +2,8 @@
 
 namespace App\Modules\CommercialProposals\Application\Actions;
 
+use App\Modules\CommercialProposals\Application\Contracts\CatalogItemLookupPort;
+use App\Modules\CommercialProposals\Application\Data\CatalogItemSnapshot;
 use App\Modules\CommercialProposals\Domain\Money;
 use App\Modules\CommercialProposals\Domain\Quantity;
 use App\Modules\CommercialProposals\Domain\SectionPayloadValidator;
@@ -27,7 +29,7 @@ use Symfony\Component\HttpKernel\Exception\UnprocessableEntityHttpException;
 final class SaveDraftAction
 {
     /**
-     * @param  array{title: string, subtitle?: ?string, client_name?: ?string, client_contact?: ?string, manager_name?: ?string, manager_email?: ?string, manager_phone?: ?string, note?: ?string, items?: list<ItemInput>, sections?: list<SectionInput>, lock_version: int}  $data
+     * @param  array{title: string, subtitle?: ?string, client_name?: ?string, client_contact?: ?string, manager_name?: ?string, manager_email?: ?string, manager_phone?: ?string, note?: ?string, project_id?: ?int, items?: list<ItemInput>, sections?: list<SectionInput>, lock_version: int}  $data
      */
     public function execute(Proposal $proposal, array $data): ProposalVersion
     {
@@ -41,6 +43,10 @@ final class SaveDraftAction
 
             if ($version->state !== VersionState::Draft) {
                 throw new ConflictHttpException('Выпущенные версии не редактируются.');
+            }
+
+            if (array_key_exists('project_id', $data)) {
+                $proposal->fill(['project_id' => $data['project_id']])->save();
             }
 
             $items = $this->buildItems($data['items'] ?? []);
@@ -95,9 +101,23 @@ final class SaveDraftAction
             throw new UnprocessableEntityHttpException('Слишком много позиций (максимум 500).');
         }
 
+        $catalogIds = array_values(array_unique(array_filter(array_map(
+            fn (array $row): ?int => isset($row['catalog_item_id']) ? (int) $row['catalog_item_id'] : null,
+            $input,
+        ))));
+
+        /** @var array<int, CatalogItemSnapshot> $catalog */
+        $catalog = app(CatalogItemLookupPort::class)->findByIds($catalogIds);
+
         $items = [];
 
         foreach ($input as $position => $row) {
+            $catalogItemId = isset($row['catalog_item_id']) ? (int) $row['catalog_item_id'] : null;
+
+            if ($catalogItemId !== null && ! isset($catalog[$catalogItemId])) {
+                throw new UnprocessableEntityHttpException('Позиция справочника не найдена.');
+            }
+
             $quantityMin = Quantity::fromString((string) $row['quantity_min']);
             $quantityMax = Quantity::fromString((string) $row['quantity_max']);
 
@@ -116,7 +136,7 @@ final class SaveDraftAction
 
             $items[] = [
                 'position' => $position + 1,
-                'catalog_item_id' => $row['catalog_item_id'] ?? null,
+                'catalog_item_id' => $catalogItemId,
                 'name' => $name,
                 'description' => $row['description'] ?? null,
                 'unit' => $row['unit'] ?? null,

@@ -14,6 +14,8 @@
     import { Form, page, router } from '@inertiajs/svelte';
     import { store } from '@/routes/proposals';
     import { destroy, issue, archive, newDraft, restore, rotateLink, update } from '@/routes/proposals';
+    import { catalogDiff, refreshCatalog } from '@/routes/proposals';
+    import { search as catalogSearch } from '@/routes/catalog/items';
     import AppHead from '@/shared/ui/AppHead.svelte';
     import Heading from '@/shared/ui/Heading.svelte';
     import InputError from '@/shared/ui/InputError.svelte';
@@ -23,16 +25,20 @@
     import { Label } from '@/shared/ui/label';
     import {
         formatMoney,
+        type CatalogDiffEntry,
+        type CatalogItemOption,
         type IssuedFlash,
         type ProposalEditPayload,
         type ProposalItemInput,
         type ProposalSectionInput,
         type ProposalTemplateOption,
+        type ProjectOption,
         type SectionType,
     } from '@/shared/api';
 
     const proposal = $derived(page.props.proposal as ProposalEditPayload | null);
     const templates = $derived((page.props.templates as ProposalTemplateOption[]) ?? []);
+    const projects = $derived((page.props.projects as ProjectOption[]) ?? []);
     const permissions = $derived((page.props.auth?.permissions ?? []) as string[]);
 
     const canEdit = $derived(permissions.includes('proposals.update'));
@@ -115,6 +121,7 @@
     let managerEmail = $state<string | null>(null);
     let managerPhone = $state<string | null>(null);
     let note = $state<string | null>(null);
+    let projectId = $state<number | ''>('');
     let items = $state<ItemRow[]>([]);
     let sections = $state<SectionRow[]>([]);
 
@@ -135,6 +142,10 @@
             payload: structuredClone(s.payload),
             ...(s.type === 'custom' ? { blocks: parseBlocks(s.payload) } : {}),
         }));
+    });
+
+    $effect(() => {
+        projectId = proposal?.project_id ?? '';
     });
 
     // -- Клиентский предпросмотр сумм (не доверенные значения, §7.2) ----------
@@ -160,7 +171,63 @@
     });
 
     function addItem() {
-        items = [...items, { name: '', description: null, unit: 'ч', quantity_min: '1', quantity_max: '1', unit_price: '0.00' }];
+        items = [...items, { catalog_item_id: null, name: '', description: null, unit: 'ч', quantity_min: '1', quantity_max: '1', unit_price: '0.00' }];
+    }
+
+    // -- Picker номенклатуры -----------------------------------------------------
+    let pickerOpen = $state(false);
+    let pickerQuery = $state('');
+    let pickerResults = $state<CatalogItemOption[]>([]);
+
+    async function runCatalogSearch() {
+        const params = new URLSearchParams();
+        if (pickerQuery.trim() !== '') params.set('q', pickerQuery.trim());
+        const response = await fetch(`${catalogSearch.url()}?${params.toString()}`, {
+            headers: { Accept: 'application/json' },
+        });
+        if (!response.ok) return;
+        const data = (await response.json()) as { items: CatalogItemOption[] };
+        pickerResults = data.items;
+    }
+
+    function openPicker() {
+        pickerOpen = true;
+        pickerQuery = '';
+        pickerResults = [];
+        void runCatalogSearch();
+    }
+
+    function pickItem(option: CatalogItemOption) {
+        items = [
+            ...items,
+            {
+                catalog_item_id: option.id,
+                name: option.name,
+                description: option.description,
+                unit: option.unit ?? 'шт',
+                quantity_min: '1',
+                quantity_max: '1',
+                unit_price: option.price,
+            },
+        ];
+        pickerOpen = false;
+    }
+
+    // -- Обновление связанных строк из справочника (план §7.3) --------------------
+    let diffEntries = $state<CatalogDiffEntry[] | null>(null);
+
+    async function showCatalogDiff() {
+        if (!proposal) return;
+        const response = await fetch(catalogDiff.url(proposal), { headers: { Accept: 'application/json' } });
+        if (!response.ok) return;
+        const data = (await response.json()) as { diff: CatalogDiffEntry[] };
+        diffEntries = data.diff;
+    }
+
+    function applyCatalogRefresh() {
+        if (!proposal) return;
+        router.post(refreshCatalog.url(proposal), {}, { preserveScroll: true });
+        diffEntries = null;
     }
 
     function removeItem(index: number) {
@@ -231,8 +298,10 @@
             manager_email: managerEmail,
             manager_phone: managerPhone,
             note,
+            project_id: projectId === '' ? null : projectId,
             lock_version: proposal?.draft?.lock_version ?? 1,
             items: items.map((item) => ({
+                catalog_item_id: item.catalog_item_id,
                 name: item.name,
                 description: item.description,
                 unit: item.unit,
@@ -434,13 +503,120 @@
                         <Label for="manager_phone">Телефон менеджера</Label>
                         <Input id="manager_phone" name="manager_phone" bind:value={managerPhone} maxlength={255} />
                     </div>
+                    <div class="grid gap-2">
+                        <Label for="project_id">Проект</Label>
+                        <select
+                            id="project_id"
+                            bind:value={projectId}
+                            class="rounded-md border border-line bg-background px-3 py-2 text-sm"
+                            disabled={!canEdit}
+                            data-test="project-select"
+                        >
+                            <option value="">Без проекта</option>
+                            {#each projects as project (project.id)}
+                                <option value={project.id}>{project.name}</option>
+                            {/each}
+                        </select>
+                    </div>
                 </div>
 
                 <div class="mt-8">
-                    <div class="mb-3 flex items-center justify-between">
+                    <div class="mb-3 flex items-center justify-between gap-2">
                         <h2 class="text-base font-medium">Позиции</h2>
-                        {#if canEdit}<Button type="button" size="sm" variant="outline" onclick={addItem} data-test="add-item">Добавить позицию</Button>{/if}
+                        {#if canEdit}
+                            <div class="flex flex-wrap gap-2">
+                                <Button type="button" size="sm" variant="outline" onclick={openPicker} data-test="add-from-catalog">
+                                    Из справочника
+                                </Button>
+                                <Button type="button" size="sm" variant="outline" onclick={showCatalogDiff} data-test="refresh-from-catalog">
+                                    Обновить из справочника
+                                </Button>
+                                <Button type="button" size="sm" variant="outline" onclick={addItem} data-test="add-item">Добавить позицию</Button>
+                            </div>
+                        {/if}
                     </div>
+
+                    {#if pickerOpen}
+                        <div class="mb-3 rounded-lg border border-line p-3" data-test="catalog-picker">
+                            <div class="flex gap-2">
+                                <Input bind:value={pickerQuery} placeholder="Поиск по номенклатуре" oninput={() => void runCatalogSearch()} class="flex-1" />
+                                <Button type="button" size="sm" variant="ghost" onclick={() => (pickerOpen = false)}>Закрыть</Button>
+                            </div>
+                            <div class="mt-2 divide-y divide-border">
+                                {#each pickerResults as option (option.id)}
+                                    <button
+                                        type="button"
+                                        class="flex w-full items-center justify-between gap-2 px-2 py-2 text-left text-sm hover:bg-muted"
+                                        onclick={() => pickItem(option)}
+                                    >
+                                        <span>
+                                            {option.name}
+                                            {#if option.category}<span class="text-muted-foreground">· {option.category}</span>{/if}
+                                        </span>
+                                        <span class="tabular-nums text-muted-foreground">{formatMoney(option.price)}</span>
+                                    </button>
+                                {:else}
+                                    <p class="px-2 py-3 text-sm text-muted-foreground">Ничего не найдено</p>
+                                {/each}
+                            </div>
+                        </div>
+                    {/if}
+
+                    {#if diffEntries !== null}
+                        <div class="mb-3 rounded-lg border border-line p-3" data-test="catalog-diff">
+                            {#if diffEntries.filter((entry) => entry.changed).length === 0}
+                                <p class="text-sm text-muted-foreground">Изменений в справочнике нет.</p>
+                            {:else}
+                                <p class="mb-2 text-sm">Строки черновика отличаются от справочника:</p>
+                                <div class="overflow-x-auto">
+                                    <table class="w-full text-sm">
+                                        <thead>
+                                        <tr class="border-b border-line text-left text-muted-foreground">
+                                            <th class="px-2 py-1 font-medium">Поле</th>
+                                            <th class="px-2 py-1 font-medium">В черновике</th>
+                                            <th class="px-2 py-1 font-medium">В справочнике</th>
+                                        </tr>
+                                        </thead>
+                                        <tbody>
+                                        {#each diffEntries.filter((entry) => entry.changed) as entry (entry.position)}
+                                            {#if entry.name.current !== entry.name.catalog}
+                                                <tr class="border-b border-line last:border-0">
+                                                    <td class="px-2 py-1">Название (стр. {entry.position})</td>
+                                                    <td class="px-2 py-1">{entry.name.current}</td>
+                                                    <td class="px-2 py-1">{entry.name.catalog}</td>
+                                                </tr>
+                                            {/if}
+                                            {#if entry.unit.current !== entry.unit.catalog}
+                                                <tr class="border-b border-line last:border-0">
+                                                    <td class="px-2 py-1">Единица (стр. {entry.position})</td>
+                                                    <td class="px-2 py-1">{entry.unit.current ?? '—'}</td>
+                                                    <td class="px-2 py-1">{entry.unit.catalog ?? '—'}</td>
+                                                </tr>
+                                            {/if}
+                                            {#if entry.unit_price.current !== entry.unit_price.catalog}
+                                                <tr class="border-b border-line last:border-0">
+                                                    <td class="px-2 py-1">Цена (стр. {entry.position})</td>
+                                                    <td class="px-2 py-1">{formatMoney(entry.unit_price.current)}</td>
+                                                    <td class="px-2 py-1">{formatMoney(entry.unit_price.catalog)}</td>
+                                                </tr>
+                                            {/if}
+                                        {/each}
+                                        </tbody>
+                                    </table>
+                                </div>
+                                <p class="mt-2 text-xs text-muted-foreground">
+                                    Применение заменит название, единицу и цену связанных строк на значения справочника
+                                    и пересчитает суммы. Количества и описания не меняются.
+                                </p>
+                            {/if}
+                            <div class="mt-3 flex gap-2">
+                                {#if diffEntries.some((entry) => entry.changed)}
+                                    <Button type="button" size="sm" onclick={applyCatalogRefresh} data-test="apply-refresh">Применить обновление</Button>
+                                {/if}
+                                <Button type="button" size="sm" variant="ghost" onclick={() => (diffEntries = null)}>Закрыть</Button>
+                            </div>
+                        </div>
+                    {/if}
                     <div class="overflow-x-auto rounded-lg border border-line">
                         <table class="w-full text-sm">
                             <thead>
@@ -456,7 +632,12 @@
                             <tbody>
                             {#each items as item, index (index)}
                                 <tr class="border-b border-line last:border-0">
-                                    <td class="px-3 py-2"><Input bind:value={item.name} placeholder="Название работы" data-test="item-name" /></td>
+                                    <td class="px-3 py-2">
+                                        <Input bind:value={item.name} placeholder="Название работы" data-test="item-name" />
+                                        {#if item.catalog_item_id}
+                                            <span class="mt-1 inline-block rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">из справочника</span>
+                                        {/if}
+                                    </td>
                                     <td class="px-3 py-2"><Input bind:value={item.unit} /></td>
                                     <td class="px-3 py-2"><Input bind:value={item.quantity_min} inputmode="decimal" /></td>
                                     <td class="px-3 py-2"><Input bind:value={item.quantity_max} inputmode="decimal" /></td>

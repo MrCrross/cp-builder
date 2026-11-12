@@ -8,13 +8,17 @@ use App\Modules\CommercialProposals\Application\Actions\ArchiveProposalAction;
 use App\Modules\CommercialProposals\Application\Actions\CreateDraftProposalAction;
 use App\Modules\CommercialProposals\Application\Actions\CreateNewDraftFromIssuedAction;
 use App\Modules\CommercialProposals\Application\Actions\DeleteDraftProposalAction;
+use App\Modules\CommercialProposals\Application\Actions\DraftCatalogDiffAction;
 use App\Modules\CommercialProposals\Application\Actions\IssueProposalAction;
+use App\Modules\CommercialProposals\Application\Actions\RefreshDraftItemsFromCatalogAction;
 use App\Modules\CommercialProposals\Application\Actions\RestoreProposalAction;
 use App\Modules\CommercialProposals\Application\Actions\RotatePublicLinkAction;
 use App\Modules\CommercialProposals\Application\Actions\SaveDraftAction;
 use App\Modules\CommercialProposals\Http\Requests\SaveProposalDraftRequest;
 use App\Modules\CommercialProposals\Infrastructure\Persistence\Proposal;
 use App\Modules\CommercialProposals\Infrastructure\Persistence\ProposalTemplate;
+use App\Modules\Projects\Infrastructure\Persistence\Project;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
@@ -77,6 +81,7 @@ class ProposalsController extends Controller
         return Inertia::render('proposal-edit/ProposalEditPage', [
             'proposal' => null,
             'templates' => $this->templates(),
+            'projects' => $this->projects(),
         ]);
     }
 
@@ -84,11 +89,14 @@ class ProposalsController extends Controller
     {
         Gate::authorize('create', Proposal::class);
 
-        $data = $request->validate(['template_id' => ['nullable', 'integer', 'exists:proposal_templates,id']]);
+        $data = $request->validate([
+            'template_id' => ['nullable', 'integer', 'exists:proposal_templates,id'],
+            'project_id' => ['nullable', 'integer', 'exists:projects,id'],
+        ]);
 
         /** @var User $user */
         $user = $request->user();
-        $proposal = $action->execute($user, $data['template_id'] ?? null);
+        $proposal = $action->execute($user, $data['template_id'] ?? null, ['project_id' => $data['project_id'] ?? null]);
 
         return redirect()->route('proposals.edit', $proposal);
     }
@@ -100,6 +108,7 @@ class ProposalsController extends Controller
         return Inertia::render('proposal-edit/ProposalEditPage', [
             'proposal' => $this->proposalPayload($proposal),
             'templates' => $this->templates(),
+            'projects' => $this->projects(),
         ]);
     }
 
@@ -214,6 +223,35 @@ class ProposalsController extends Controller
     }
 
     /**
+     * Diff snapshot-строк черновика против справочника (план §7.3):
+     * только чтение, используется диалогом «Обновить из справочника».
+     */
+    public function catalogDiff(Proposal $proposal, DraftCatalogDiffAction $action): JsonResponse
+    {
+        Gate::authorize('view', $proposal);
+
+        return response()->json(['diff' => $action->execute($proposal)]);
+    }
+
+    /**
+     * Применение актуальных значений справочника к связанным строкам
+     * черновика после явного подтверждения пользователя (план §7.3).
+     */
+    public function refreshCatalog(Request $request, Proposal $proposal, RefreshDraftItemsFromCatalogAction $action): RedirectResponse
+    {
+        Gate::authorize('update', $proposal);
+
+        ['updated' => $updated] = $action->execute($request->user(), $proposal);
+
+        Inertia::flash('toast', [
+            'type' => 'success',
+            'message' => $updated > 0 ? __("Обновлено позиций: {$updated}.") : __('Изменений нет.'),
+        ]);
+
+        return back();
+    }
+
+    /**
      * @return array<int, ProposalTemplate>
      */
     private function templates(): array
@@ -223,6 +261,20 @@ class ProposalsController extends Controller
             ->orderBy('name')
             ->get(['id', 'name', 'default_title'])
             ->all();
+    }
+
+    /**
+     * Проекты для селектора привязки КП (транспортный список).
+     *
+     * @return list<array{id: int, name: string}>
+     */
+    private function projects(): array
+    {
+        return array_values(Project::query()
+            ->orderBy('name')
+            ->get(['id', 'name'])
+            ->map(fn (Project $project): array => ['id' => $project->id, 'name' => $project->name])
+            ->all());
     }
 
     /**
@@ -240,6 +292,7 @@ class ProposalsController extends Controller
             'number' => $proposal->number,
             'status' => $proposal->status->value,
             'template_id' => $proposal->template_id,
+            'project_id' => $proposal->project_id,
             // Публичный URL показывается один раз при выпуске/rotation (flash):
             // в БД только hash, восстановить его нельзя (план §9.3).
             'has_public_link' => $proposal->publicLinks()->whereNull('revoked_at')->exists(),
@@ -257,6 +310,7 @@ class ProposalsController extends Controller
                 'total_min' => $draft->total_min,
                 'total_max' => $draft->total_max,
                 'items' => $draft->items->map(fn ($item) => [
+                    'catalog_item_id' => $item->catalog_item_id,
                     'name' => $item->name,
                     'description' => $item->description,
                     'unit' => $item->unit,
