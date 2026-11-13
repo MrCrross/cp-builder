@@ -41,7 +41,7 @@ class SaveProposalDraftRequest extends FormRequest
             'items.*.unit_price' => $decimal,
             'items.*.catalog_item_id' => ['nullable', 'integer', 'exists:catalog_items,id'],
             'sections' => ['array', 'max:100'],
-            'sections.*.type' => ['required', Rule::in(['stages', 'custom', 'table', 'license', 'price_badge'])],
+            'sections.*.type' => ['required', Rule::in(['items', 'stages', 'custom', 'table', 'license', 'price_badge'])],
             'sections.*.enabled' => ['boolean'],
             'sections.*.payload' => ['required', 'array'],
             'lock_version' => ['required', 'integer', 'min:1'],

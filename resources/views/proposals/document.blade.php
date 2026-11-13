@@ -8,10 +8,50 @@
     $items = $version->items;
     $sections = $version->sections->filter(fn ($s) => $s->enabled);
 
+    // Позиции — блоки: строки привязаны к своей секции; legacy-строки
+    // (section_id NULL, документы до миграции) — прежняя шапочная таблица.
+    $legacyItems = $items->filter(fn ($i) => $i->section_id === null)->values();
+    $itemsBySection = $items->filter(fn ($i) => $i->section_id !== null)->groupBy('section_id');
+
     $money = fn (?string $value): string => $value === null ? '' : Money::fromDecimalString($value)->toDisplayString();
     $quantity = fn (string $min, string $max): string => rtrim(rtrim($min, '0'), '.') === rtrim(rtrim($max, '0'), '.')
         ? $min
         : $min.'–'.$max;
+
+    // Таблица позиций с подытогом; подытоги групп складываются в итог документа.
+    $docTotalMin = '0.00';
+    $docTotalMax = '0.00';
+    $itemGroupCount = 0;
+    $renderItemsTable = function ($rows, string $totalLabel) use ($money, $quantity, &$docTotalMin, &$docTotalMax, &$itemGroupCount): string {
+        $rows = collect($rows)->values();
+        if ($rows->isEmpty()) return '';
+        $itemGroupCount++;
+
+        $sumMin = '0.00';
+        $sumMax = '0.00';
+        $body = '';
+        $num = 0;
+        foreach ($rows as $item) {
+            $num++;
+            $sumMin = bcadd($sumMin, $item->amount_min, 2);
+            $sumMax = bcadd($sumMax, $item->amount_max, 2);
+            $body .= '<tr>'
+                .'<td>'.$num.'</td>'
+                .'<td>'.e($item->name)
+                .($item->description ? '<div style="color: var(--muted); font-size: 12px;">'.e($item->description).'</div>' : '')
+                .'</td>'
+                .'<td class="num">'.e($quantity($item->quantity_min, $item->quantity_max)).($item->unit ? ' '.e($item->unit) : '').'</td>'
+                .'<td class="num">'.$money($item->unit_price).'</td>'
+                .'<td class="num">'.$money($item->amount_min).($item->amount_min !== $item->amount_max ? ' — '.$money($item->amount_max) : '').'</td>'
+                .'</tr>';
+        }
+        $docTotalMin = bcadd($docTotalMin, $sumMin, 2);
+        $docTotalMax = bcadd($docTotalMax, $sumMax, 2);
+
+        return '<table class="items"><thead><tr><th>№</th><th>Работы</th><th class="num">Кол-во</th><th class="num">Цена</th><th class="num">Сумма</th></tr></thead><tbody>'
+            .$body
+            .'</tbody><tfoot><tr><td colspan="4">'.$totalLabel.'</td><td class="num">'.$money($sumMin).($sumMin !== $sumMax ? ' — '.$money($sumMax) : '').'</td></tr></tfoot></table>';
+    };
 
     // Произвольная таблица: итог каждой ценовой колонки; в общий итог —
     // только при одной ценовой колонке и явном include_in_total (§7.2).
@@ -103,6 +143,15 @@
         section.block ol.stages { margin: 0; padding-left: 20px; }
         section.block ol.stages li { margin-bottom: 6px; }
         section.block ol.stages .duration { color: var(--muted); }
+        /* Форматированный текст (WYSIWYG) */
+        section.block .rich-text p { margin: 8px 0; }
+        section.block .rich-text h1 { font-size: 22px; margin: 20px 0 8px; }
+        section.block .rich-text h2 { font-size: 18px; margin: 18px 0 8px; }
+        section.block .rich-text h3 { font-size: 16px; margin: 14px 0 6px; }
+        section.block .rich-text ul, section.block .rich-text ol { margin: 8px 0; padding-left: 22px; }
+        section.block .rich-text li { margin-bottom: 4px; }
+        section.block .rich-text div { margin: 8px 0; }
+        section.block .rich-text code { background: #F3F5F1; padding: 1px 4px; border-radius: 3px; font-size: 13px; }
         section.block table { width: 100%; border-collapse: collapse; font-size: 14px; }
         section.block table th, section.block table td { border: 1px solid var(--line); padding: 6px 10px; text-align: left; }
         section.block table tr.totals td { font-weight: 600; background: #F3F5F1; }
@@ -154,43 +203,18 @@
         </div>
     </div>
 
-    @if($items->isNotEmpty())
-        <table class="items">
-            <thead>
-            <tr>
-                <th>№</th>
-                <th>Работы</th>
-                <th class="num">Кол-во</th>
-                <th class="num">Цена</th>
-                <th class="num">Сумма</th>
-            </tr>
-            </thead>
-            <tbody>
-            @foreach($items as $item)
-                <tr>
-                    <td>{{ $loop->iteration }}</td>
-                    <td>
-                        {{ $item->name }}
-                        @if($item->description)<div style="color: var(--muted); font-size: 12px;">{{ $item->description }}</div>@endif
-                    </td>
-                    <td class="num">{{ $quantity($item->quantity_min, $item->quantity_max) }}@if($item->unit) {{ $item->unit }}@endif</td>
-                    <td class="num">{{ $money($item->unit_price) }}</td>
-                    <td class="num">{{ $money($item->amount_min) }}@if($item->amount_min !== $item->amount_max) — {{ $money($item->amount_max) }}@endif</td>
-                </tr>
-            @endforeach
-            </tbody>
-            <tfoot>
-            <tr>
-                <td colspan="4">Итого по работам</td>
-                <td class="num">{{ $money($version->total_min) }}@if($version->total_min !== $version->total_max) — {{ $money($version->total_max) }}@endif</td>
-            </tr>
-            </tfoot>
-        </table>
+    @if($legacyItems->isNotEmpty())
+        {!! $renderItemsTable($legacyItems, 'Итого по работам') !!}
     @endif
 
     @foreach($sections as $section)
         <section class="block">
             @switch($section->type->value)
+                @case('items')
+                    @if(!empty($section->payload['title']))<h2>{{ $section->payload['title'] }}</h2>@endif
+                    {!! $renderItemsTable($itemsBySection[$section->id] ?? [], 'Итого') !!}
+                @break
+
                 @case('stages')
                     @if(!empty($section->payload['title']))<h2>{{ $section->payload['title'] }}</h2>@endif
                     <ol class="stages">
@@ -202,7 +226,7 @@
 
                 @case('custom')
                     @if(!empty($section->payload['title']))<h2>{{ $section->payload['title'] }}</h2>@endif
-                    {!! EditorJsRenderer::render(['blocks' => $section->payload['blocks'] ?? []]) !!}
+                    <div class="rich-text">{!! EditorJsRenderer::renderSection($section->payload) !!}</div>
                 @break
 
                 @case('table')
@@ -232,6 +256,12 @@
             @endswitch
         </section>
     @endforeach
+
+    @if($itemGroupCount > 1)
+        <div class="note" style="text-align: right; font-weight: 600;">
+            Итого по документу: {{ $money($docTotalMin) }}@if($docTotalMin !== $docTotalMax) — {{ $money($docTotalMax) }}@endif
+        </div>
+    @endif
 
     @if($version->note)
         <div class="note">{{ $version->note }}</div>

@@ -449,3 +449,79 @@ it('checks proposal permissions per role', function (string $role, string $abili
     ['manager', 'rotateLink', true],
     ['administrator', 'issue', true],
 ]);
+
+it('saves items as a section with linked rows and honors enabled flag in public render', function () {
+    $actor = actorWithRole('manager');
+    $proposal = (new CreateDraftProposalAction)->execute($actor);
+
+    $version = (new SaveDraftAction)->execute($proposal, [
+        'title' => 'КП',
+        'items' => [],
+        'sections' => [
+            [
+                'type' => 'items',
+                'enabled' => true,
+                'payload' => [
+                    'title' => 'Позиции',
+                    'items' => [[
+                        'name' => 'Монтаж оборудования',
+                        'unit' => 'ч',
+                        'quantity_min' => '2',
+                        'quantity_max' => '4',
+                        'unit_price' => '500.00',
+                    ]],
+                ],
+            ],
+            [
+                'type' => 'price_badge',
+                'enabled' => true,
+                'payload' => ['label' => 'Стоимость по запросу'],
+            ],
+        ],
+        'lock_version' => 1,
+    ]);
+
+    $item = $version->items()->sole();
+    $itemsSection = $version->sections()->where('type', 'items')->sole();
+
+    expect($item->section_id)->toBe($itemsSection->id)
+        ->and($item->amount_min)->toBe('1000.00')
+        ->and($item->amount_max)->toBe('2000.00')
+        ->and($version->total_min)->toBe('1000.00')
+        ->and($version->total_max)->toBe('2000.00');
+
+    ['token' => $token] = (new IssueProposalAction)->execute($actor, $proposal);
+    $html = $this->get(route('kp.show', ['token' => $token]))->assertOk()->getContent();
+
+    expect($html)->toContain('Монтаж оборудования')
+        ->toContain('Итого');
+
+    // Выключенный блок позиций не попадает в документ
+    $proposal2 = (new CreateDraftProposalAction)->execute($actor);
+    (new SaveDraftAction)->execute($proposal2, [
+        'title' => 'КП без позиций',
+        'items' => [],
+        'sections' => [
+            [
+                'type' => 'items',
+                'enabled' => false,
+                'payload' => [
+                    'title' => null,
+                    'items' => [[
+                        'name' => 'Скрытая работа',
+                        'unit' => 'ч',
+                        'quantity_min' => '1',
+                        'quantity_max' => '1',
+                        'unit_price' => '100.00',
+                    ]],
+                ],
+            ],
+        ],
+        'lock_version' => 1,
+    ]);
+
+    ['token' => $token2] = (new IssueProposalAction)->execute($actor, $proposal2);
+    $html2 = $this->get(route('kp.show', ['token' => $token2]))->assertOk()->getContent();
+
+    expect($html2)->not->toContain('Скрытая работа');
+});

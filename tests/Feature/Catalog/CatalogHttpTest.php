@@ -12,6 +12,8 @@ use App\Modules\CommercialProposals\Actions\SaveDraftAction;
 use Database\Seeders\BaselineSeeder;
 use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Storage;
 use Spatie\Permission\Models\Role;
 use Symfony\Component\HttpKernel\Exception\ConflictHttpException;
 
@@ -181,4 +183,95 @@ it('updates item price without touching saved proposal snapshots', function () {
     $snapshotItem = $proposal->draftVersion->items()->sole();
     expect($snapshotItem->name)->toBe('Работа')
         ->and($snapshotItem->unit_price)->toBe('100.00');
+});
+
+function pngUpload(string $append = ''): UploadedFile
+{
+    // Реальный 1x1 PNG: mime-валидация смотрит на содержимое, а не на расширение
+    $png = base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=');
+    $path = tempnam(sys_get_temp_dir(), 'img');
+    file_put_contents($path, $png.$append);
+
+    return new UploadedFile($path, 'pixel.png', 'image/png', null, true);
+}
+
+it('uploads, replaces and removes item image', function () {
+    Storage::fake('local');
+    $manager = catalogUser('manager');
+
+    $this->actingAs($manager)->post(route('catalog.items.store'), [
+        'name' => 'Позиция с фото',
+        'price' => '10.00',
+        'image' => pngUpload(),
+    ])->assertRedirect();
+
+    $item = CatalogItem::query()->sole();
+    expect($item->image)->toMatch('#^catalog/[a-f0-9]{64}\.png$#')
+        ->and(Storage::disk('local')->exists($item->image))->toBeTrue();
+
+    $this->actingAs($manager)
+        ->get(route('catalog.items.image', ['path' => $item->image]))
+        ->assertOk();
+
+    // Замена: прежний файл catalog/ удаляется
+    $oldPath = $item->image;
+    $this->actingAs($manager)->put(route('catalog.items.update', $item), [
+        'name' => $item->name,
+        'price' => $item->price,
+        'image' => pngUpload('v2'),
+    ])->assertRedirect();
+
+    expect($item->refresh()->image)->not->toBe($oldPath)
+        ->and(Storage::disk('local')->exists($oldPath))->toBeFalse();
+
+    // Импортированная картинка (imports/) при удалении не трогается
+    $importedPath = 'imports/commerceml/'.str_repeat('a', 64).'.jpg';
+    Storage::disk('local')->put($importedPath, 'x');
+    $item->update(['image' => $importedPath]);
+
+    $this->actingAs($manager)->put(route('catalog.items.update', $item), [
+        'name' => $item->name,
+        'price' => $item->price,
+        'remove_image' => true,
+    ])->assertRedirect();
+
+    expect($item->refresh()->image)->toBeNull()
+        ->and(Storage::disk('local')->exists($importedPath))->toBeTrue();
+});
+
+it('rejects non-image upload and foreign image paths', function () {
+    Storage::fake('local');
+    $manager = catalogUser('manager');
+
+    $this->actingAs($manager)->post(route('catalog.items.store'), [
+        'name' => 'Не картинка',
+        'price' => '10.00',
+        'image' => UploadedFile::fake()->create('doc.pdf', 100, 'application/pdf'),
+    ])->assertSessionHasErrors('image');
+
+    $this->actingAs($manager)->get(route('catalog.items.image', ['path' => '../.env']))->assertNotFound();
+    $this->actingAs($manager)->get(route('catalog.items.image', ['path' => 'catalog/../../secret']))->assertNotFound();
+});
+
+it('searches picker by item properties', function () {
+    $manager = catalogUser('manager');
+    CatalogItem::factory()->create([
+        'name' => 'Задвижка 30с41нж',
+        'properties' => [['name' => 'Диаметр', 'value' => 'ДН100'], ['name' => 'Материал', 'value' => 'чугун']],
+    ]);
+    CatalogItem::factory()->inactive()->create([
+        'name' => 'Отключённая задвижка',
+        'properties' => [['name' => 'Диаметр', 'value' => 'ДН100']],
+    ]);
+
+    $response = $this->actingAs($manager)
+        ->getJson(route('catalog.items.search', ['q' => 'ДН100']))
+        ->assertOk();
+
+    $names = collect($response->json('items'))->pluck('name')->all();
+
+    expect($names)->toContain('Задвижка 30с41нж')
+        ->not->toContain('Отключённая задвижка')
+        // Свойства отдаются в picker для отображения
+        ->and($response->json('items.0.properties.0.value'))->toBe('ДН100');
 });

@@ -38,12 +38,22 @@ test('project → proposal → catalog item → diff refresh', async ({ page }) 
     await expect(page).toHaveURL(/\/proposals\/\d+$/);
     await expect(page.locator('#project_id')).toHaveValue(/\d+/);
 
-    // -- Позиция из справочника и сохранение -----------------------------------
+    // -- Блок «Позиции» и позиция из справочника -------------------------------
+    await page.getByTestId('add-block').click();
+    await page.getByRole('button', { name: /Позиции/ }).click();
+    await expect(page.getByTestId('add-from-catalog')).toBeVisible();
+
     await page.getByTestId('add-from-catalog').click();
+    await page.getByTestId('catalog-picker-search').fill(itemName);
+    await expect(
+        page.getByTestId('catalog-picker').locator('label'),
+    ).toHaveCount(1);
     await page
         .getByTestId('catalog-picker')
-        .getByRole('button', { name: new RegExp(itemName) })
-        .click();
+        .locator('label', { hasText: itemName })
+        .getByRole('checkbox')
+        .check();
+    await page.getByTestId('catalog-picker-add').click();
     await expect(
         page.getByText('из справочника', { exact: true }),
     ).toBeVisible();

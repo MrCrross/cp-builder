@@ -29,4 +29,5 @@ export interface CatalogItemOption {
     unit: string | null;
     price: string;
     category: string | null;
+    properties?: { name: string; value: string }[];
 }

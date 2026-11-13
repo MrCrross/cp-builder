@@ -4,7 +4,9 @@ namespace App\Modules\CommercialProposals\Actions;
 
 use App\Models\User;
 use App\Modules\CommercialProposals\Domain\Enums\ProposalStatus;
+use App\Modules\CommercialProposals\Domain\Enums\SectionType;
 use App\Modules\CommercialProposals\Domain\Enums\VersionState;
+use App\Modules\CommercialProposals\Domain\Services\ItemRowsBuilder;
 use App\Modules\CommercialProposals\Models\Proposal;
 use App\Modules\CommercialProposals\Models\ProposalTemplate;
 use App\Modules\CommercialProposals\Models\ProposalVersion;
@@ -58,11 +60,25 @@ final class CreateDraftProposalAction
                 ]);
             }
 
+            $itemRows = new ItemRowsBuilder;
+
             foreach ($content['sections'] ?? [] as $position => $section) {
-                $version->sections()->create([
+                $created = $version->sections()->create([
                     'position' => $position + 1,
                     ...$section,
                 ]);
+
+                // Строки items-блоков шаблона сразу становятся snapshot-строками
+                // (суммы считает доменный VO) — публичный рендер читает их
+                // из proposal_items, а не из payload.
+                if (($section['type'] ?? null) === SectionType::Items->value) {
+                    $rows = $itemRows->build($section['payload']['items'] ?? []);
+                    $version->items()->createMany(array_map(
+                        fn (array $row, int $i): array => [...$row, 'section_id' => $created->id, 'position' => $i + 1],
+                        $rows,
+                        array_keys($rows),
+                    ));
+                }
             }
 
             Audit::record($actor, 'proposal.created', $proposal, [], [

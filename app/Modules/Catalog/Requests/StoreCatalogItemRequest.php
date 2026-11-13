@@ -24,6 +24,7 @@ class StoreCatalogItemRequest extends FormRequest
             'unit' => ['nullable', 'string', 'max:50'],
             'price' => ['required', 'string', 'regex:/^\d+(\.\d{1,2})?$/'],
             'active' => ['boolean'],
+            'image' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:5120'],
         ];
     }
 }

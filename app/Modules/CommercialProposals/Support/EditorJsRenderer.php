@@ -3,11 +3,12 @@
 namespace App\Modules\CommercialProposals\Support;
 
 /**
- * Strict-рендерер Editor.js block JSON (план §9.3): allowlist типов блоков
- * и их полей, всё неизвестное отбрасывается, текст экранируется. Inline-HTML
- * в текстах допускает только b/strong/i/em/u/br/code и a[href] со схемами
- * https/mailto/tel (rel=noopener noreferrer). Ни script, ни style, ни unknown
- * blocks, ни embed'и — не выводятся.
+ * Strict-рендерер текстового контента секций (план §9.3): два формата —
+ * legacy Editor.js block JSON ({@see render}) и единый HTML-документ из
+ * WYSIWYG-редактора ({@see renderHtml}); выбор — в {@see renderSection}.
+ * Allowlist типов и тегов, всё неизвестное отбрасывается, ссылки — только
+ * со схемами https/mailto/tel (rel=noopener noreferrer). Ни script, ни
+ * style, ни unknown blocks, ни embed'и — не выводятся.
  */
 final class EditorJsRenderer
 {
@@ -134,6 +135,75 @@ final class EditorJsRenderer
     }
 
     /**
+     * Рендер секции custom: новый формат — единый HTML-документ (WYSIWYG),
+     * старый — Editor.js block JSON. Оба пути идут через allowlist-санитайзеры.
+     *
+     * @param  array<string, mixed>  $payload
+     */
+    public static function renderSection(array $payload): string
+    {
+        $html = $payload['html'] ?? null;
+
+        if (is_string($html) && trim(strip_tags($html)) !== '') {
+            return self::renderHtml($html);
+        }
+
+        return self::render(['blocks' => $payload['blocks'] ?? []]);
+    }
+
+    /**
+     * Блочный HTML из WYSIWYG-редактора: allowlist тегов, у не-<a> тегов
+     * атрибуты удаляются (кроме text-align на блочных), <a> — только
+     * href с безопасной схемой и rel=noopener noreferrer.
+     */
+    public static function renderHtml(string $html): string
+    {
+        $stripped = strip_tags(
+            $html,
+            '<p><div><h1><h2><h3><ul><ol><li><table><thead><tbody><tr><th><td><b><strong><i><em><u><br><code><a>',
+        );
+
+        // Блочные теги: сохраняем только выравнивание (style text-align или
+        // устаревший align), остальные атрибуты удаляем.
+        $withoutAttrs = (string) preg_replace_callback(
+            '/<(p|div|h1|h2|h3|li|td|th)(\s[^>]*)?>/i',
+            function (array $m): string {
+                $tag = strtolower($m[1]);
+                $attrs = $m[2] ?? '';
+                $align = null;
+
+                if (preg_match('/text-align\s*:\s*(left|center|right|justify)/i', $attrs, $mm) === 1) {
+                    $align = strtolower($mm[1]);
+                } elseif (preg_match('/align\s*=\s*(?:"([a-z]+)"|\'([a-z]+)\'|([a-z]+))/i', $attrs, $mm) === 1) {
+                    foreach ([1, 2, 3] as $offset) {
+                        if (isset($mm[$offset]) && $mm[$offset] !== '') {
+                            $align = strtolower($mm[$offset]);
+
+                            break;
+                        }
+                    }
+                }
+
+                if ($align === null || ! in_array($align, ['left', 'center', 'right', 'justify'], true)) {
+                    return '<'.$tag.'>';
+                }
+
+                return '<'.$tag.' style="text-align: '.$align.';">';
+            },
+            $stripped,
+        );
+
+        // Структурные и инлайновые теги: атрибуты не сохраняем вовсе.
+        $clean = (string) preg_replace(
+            '/<(ul|ol|table|thead|tbody|tr|b|strong|i|em|u|code|br)(\s[^>]*)?>/i',
+            '<$1>',
+            $withoutAttrs,
+        );
+
+        return self::rebuildLinks($clean);
+    }
+
+    /**
      * Inline-HTML: allowlist тегов + безопасные ссылки. Неизвестные теги
      * удаляются вместе с атрибутами, их текст сохраняется.
      */
@@ -144,7 +214,14 @@ final class EditorJsRenderer
         // У не-<a> разрешённых тегов удаляем все атрибуты.
         $withoutAttrs = preg_replace('/<(b|strong|i|em|u|code)(\s[^>]*)?>/i', '<$1>', (string) $allowed) ?? '';
 
-        // <a> пересобираем: только валидная схема, только href, rel добавляем.
+        return self::rebuildLinks($withoutAttrs);
+    }
+
+    /**
+     * <a> пересобираем: только валидная схема, только href, rel добавляем.
+     */
+    private static function rebuildLinks(string $html): string
+    {
         return (string) preg_replace_callback('/<a\s[^>]*>/i', function (array $m): string {
             if (preg_match('/href\s*=\s*("([^"]*)"|\'([^\']*)\'|([^\s>]+))/i', $m[0], $mm) !== 1) {
                 return '';
@@ -167,7 +244,7 @@ final class EditorJsRenderer
             }
 
             return '<a href="'.htmlspecialchars($href, ENT_QUOTES, 'UTF-8').'" rel="noopener noreferrer">';
-        }, $withoutAttrs);
+        }, $html);
     }
 
     /**

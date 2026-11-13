@@ -54,14 +54,33 @@
     }
 
     // -- Позиции ---------------------------------------------------------------
+    const formErrors = $derived((page.props.errors ?? {}) as Record<string, string>);
+
     let itemName = $state('');
     let itemCategoryId = $state<number | ''>('');
     let itemUnit = $state('шт');
     let itemPrice = $state('0.00');
+    let itemImageFile = $state<File | null>(null);
+    let itemImagePreview = $state<string | null>(null);
+    let itemImageInput: HTMLInputElement | undefined = $state();
+
+    function pickImage(file: File | null, setPreview: (url: string | null) => void, previous: string | null): File | null {
+        if (previous) URL.revokeObjectURL(previous);
+        setPreview(file ? URL.createObjectURL(file) : null);
+        return file;
+    }
+
+    function onCreateImageChange(event: Event) {
+        const file = (event.target as HTMLInputElement).files?.[0] ?? null;
+        itemImageFile = pickImage(file, (url) => (itemImagePreview = url), itemImagePreview);
+    }
 
     let editingItemId = $state<number | null>(null);
     let editItem = $state<CatalogItemListItem | null>(null);
     let editItemCategoryId = $state<number | ''>('');
+    let editImageFile = $state<File | null>(null);
+    let editImagePreview = $state<string | null>(null);
+    let editRemoveImage = $state(false);
 
     function createItem() {
         router.post(
@@ -71,12 +90,15 @@
                 category_id: itemCategoryId === '' ? null : itemCategoryId,
                 unit: itemUnit || null,
                 price: itemPrice,
+                image: itemImageFile,
             },
             {
                 preserveScroll: true,
                 onSuccess: () => {
                     itemName = '';
                     itemPrice = '0.00';
+                    itemImageFile = pickImage(null, (url) => (itemImagePreview = url), itemImagePreview);
+                    if (itemImageInput) itemImageInput.value = '';
                 },
             },
         );
@@ -86,6 +108,15 @@
         editingItemId = item.id;
         editItem = { ...item };
         editItemCategoryId = item.category?.id ?? '';
+        editImageFile = null;
+        editImagePreview = null;
+        editRemoveImage = false;
+    }
+
+    function onEditImageChange(event: Event) {
+        const file = (event.target as HTMLInputElement).files?.[0] ?? null;
+        editImageFile = pickImage(file, (url) => (editImagePreview = url), editImagePreview);
+        if (file) editRemoveImage = false;
     }
 
     function saveEditItem() {
@@ -99,6 +130,8 @@
                 unit: editItem.unit,
                 price: editItem.price,
                 active: editItem.active,
+                image: editImageFile,
+                remove_image: editRemoveImage,
             },
             { preserveScroll: true, onSuccess: () => (editingItemId = null) },
         );
@@ -184,6 +217,28 @@
                 <Label for="item-price">Цена, ₽</Label>
                 <Input id="item-price" bind:value={itemPrice} inputmode="decimal" data-test="item-price" />
             </div>
+            <div class="grid min-w-56 gap-2">
+                <Label for="item-image">Картинка</Label>
+                <div class="flex items-center gap-2">
+                    {#if itemImagePreview}
+                        <img src={itemImagePreview} alt="Предпросмотр картинки" class="h-9 w-9 shrink-0 rounded border border-line object-cover" />
+                    {/if}
+                    <input
+                        id="item-image"
+                        bind:this={itemImageInput}
+                        type="file"
+                        accept="image/jpeg,image/png,image/webp"
+                        onchange={onCreateImageChange}
+                        class="text-xs text-muted-foreground file:mr-2 file:rounded-md file:border file:border-line file:bg-background file:px-2 file:py-1.5 file:text-sm file:text-foreground"
+                        data-test="item-image"
+                    />
+                </div>
+                {#if formErrors.image}
+                    <p class="text-xs text-destructive">{formErrors.image}</p>
+                {:else}
+                    <p class="text-xs text-muted-foreground">JPEG, PNG или WebP, до 5 МБ.</p>
+                {/if}
+            </div>
             <Button onclick={createItem} disabled={!itemName} data-test="create-item">Создать</Button>
         </div>
     {/if}
@@ -204,7 +259,37 @@
             {#each items.data as item (item.id)}
                 <tr class="border-b border-line last:border-0">
                     {#if editingItemId === item.id && editItem}
-                        <td class="px-4 py-2"><Input bind:value={editItem.name} maxlength={500} /></td>
+                        <td class="px-4 py-2">
+                            <div class="flex items-start gap-2">
+                                {#if editImagePreview || (!editRemoveImage && itemImageUrl(editItem))}
+                                    <img
+                                        src={editImagePreview ?? itemImageUrl(editItem)}
+                                        alt=""
+                                        class="mt-1 h-10 w-10 shrink-0 rounded border border-line object-cover"
+                                    />
+                                {/if}
+                                <div class="grid flex-1 gap-1">
+                                    <Input bind:value={editItem.name} maxlength={500} />
+                                    <input
+                                        type="file"
+                                        accept="image/jpeg,image/png,image/webp"
+                                        onchange={onEditImageChange}
+                                        aria-label="Заменить картинку"
+                                        class="text-xs text-muted-foreground file:mr-2 file:rounded-md file:border file:border-line file:bg-background file:px-2 file:py-1 file:text-xs file:text-foreground"
+                                        data-test="edit-item-image"
+                                    />
+                                    {#if editItem.image}
+                                        <label class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                                            <input type="checkbox" bind:checked={editRemoveImage} disabled={Boolean(editImageFile)} />
+                                            Удалить картинку
+                                        </label>
+                                    {/if}
+                                    {#if formErrors.image}
+                                        <p class="text-xs text-destructive">{formErrors.image}</p>
+                                    {/if}
+                                </div>
+                            </div>
+                        </td>
                         <td class="px-4 py-2">
                             <select bind:value={editItemCategoryId} class="rounded-md border border-line bg-background px-2 py-1.5 text-sm">
                                 <option value="">Без категории</option>

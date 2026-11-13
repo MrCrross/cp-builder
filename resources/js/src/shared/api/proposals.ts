@@ -28,6 +28,7 @@ export interface ProposalItemInput {
 }
 
 export type SectionType =
+    | 'items'
     | 'stages'
     | 'custom'
     | 'table'

@@ -10,12 +10,12 @@
 </script>
 
 <script lang="ts">
-    import { onMount } from 'svelte';
+    import { onMount, untrack } from 'svelte';
     import { Form, page, router } from '@inertiajs/svelte';
+    import { toast } from 'svelte-sonner';
     import { store } from '@/routes/proposals';
     import { destroy, issue, archive, newDraft, restore, rotateLink, update } from '@/routes/proposals';
     import { catalogDiff, refreshCatalog } from '@/routes/proposals';
-    import { search as catalogSearch } from '@/routes/catalog/items';
     import AppHead from '@/shared/ui/AppHead.svelte';
     import Heading from '@/shared/ui/Heading.svelte';
     import InputError from '@/shared/ui/InputError.svelte';
@@ -23,18 +23,34 @@
     import { Button } from '@/shared/ui/button';
     import { Input } from '@/shared/ui/input';
     import { Label } from '@/shared/ui/label';
+    import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/shared/ui/dropdown-menu';
     import {
         formatMoney,
         type CatalogDiffEntry,
-        type CatalogItemOption,
         type IssuedFlash,
         type ProposalEditPayload,
         type ProposalItemInput,
         type ProposalSectionInput,
         type ProposalTemplateOption,
         type ProjectOption,
-        type SectionType,
     } from '@/shared/api';
+    import {
+        blocksToHtml,
+        extractSectionErrors,
+        lineAmount,
+        sectionHasContent,
+        sectionHints,
+        sectionLabels,
+        type SectionRow,
+        type SectionType,
+    } from './blocks';
+    import SectionCard from './SectionCard.svelte';
+    import StagesBlock from './StagesBlock.svelte';
+    import RichTextBlock from './RichTextBlock.svelte';
+    import TableBlock from './TableBlock.svelte';
+    import LicenseBlock from './LicenseBlock.svelte';
+    import ItemsBlock from './ItemsBlock.svelte';
+    import Plus from '@lucide/svelte/icons/plus';
 
     const proposal = $derived(page.props.proposal as ProposalEditPayload | null);
     const templates = $derived((page.props.templates as ProposalTemplateOption[]) ?? []);
@@ -48,69 +64,104 @@
     let templateId: number | '' = $state('');
 
     // -- Редактор черновика ----------------------------------------------------
-    type ItemRow = ProposalItemInput;
 
-    type CustomBlock = {
-        type: 'paragraph' | 'header' | 'list' | 'table';
-        text: string;
-        level: number;
-        style: 'ordered' | 'unordered';
-        items: string;
-        withHeadings: boolean;
-        content: string;
-    };
+    /** Payload с сервера → редактируемая секция (custom: legacy-блоки → HTML). */
+    function parseSection(input: ProposalSectionInput): SectionRow {
+        const raw = (input.payload ?? {}) as Record<string, unknown>;
+        const enabled = input.enabled !== false;
+        const title = (raw.title as string | null | undefined) ?? null;
 
-    function emptyBlock(type: CustomBlock['type']): CustomBlock {
-        return { type, text: '', level: 2, style: 'unordered', items: '', withHeadings: true, content: '' };
-    }
-
-    /** Загруженный payload custom-секции → редактируемые блоки. */
-    function parseBlocks(payload: Record<string, unknown>): CustomBlock[] {
-        const raw = (payload.blocks as { type: string; data: Record<string, unknown> }[]) ?? [];
-        return raw.map((block) => {
-            const base = emptyBlock('paragraph');
-            if (block.type === 'header') {
-                return { ...base, type: 'header', text: String(block.data.text ?? ''), level: Number(block.data.level ?? 2) };
-            }
-            if (block.type === 'list') {
+        switch (input.type) {
+            case 'items': {
+                const rows = Array.isArray(raw.items) ? raw.items : [];
                 return {
-                    ...base,
-                    type: 'list',
-                    style: block.data.style === 'ordered' ? 'ordered' : 'unordered',
-                    items: Array.isArray(block.data.items) ? block.data.items.map(String).join('\n') : '',
+                    type: 'items',
+                    enabled,
+                    payload: {
+                        title,
+                        items: rows.map((row) => {
+                            const item = row as Record<string, unknown> | null;
+                            return {
+                                catalog_item_id: typeof item?.catalog_item_id === 'number' ? item.catalog_item_id : null,
+                                name: String(item?.name ?? ''),
+                                description: typeof item?.description === 'string' ? item.description : null,
+                                unit: typeof item?.unit === 'string' ? item.unit : null,
+                                quantity_min: String(item?.quantity_min ?? '1'),
+                                quantity_max: String(item?.quantity_max ?? '1'),
+                                unit_price: String(item?.unit_price ?? '0.00'),
+                            };
+                        }),
+                    },
                 };
             }
-            if (block.type === 'table') {
-                const rows = Array.isArray(block.data.content) ? block.data.content : [];
+            case 'stages': {
+                const stages = Array.isArray(raw.stages) ? raw.stages : [];
                 return {
-                    ...base,
+                    type: 'stages',
+                    enabled,
+                    payload: {
+                        title,
+                        stages: stages.map((stage) => {
+                            const item = stage as Record<string, unknown> | null;
+                            return { title: String(item?.title ?? ''), duration: String(item?.duration ?? '') };
+                        }),
+                    },
+                };
+            }
+            case 'custom':
+                return {
+                    type: 'custom',
+                    enabled,
+                    payload: {
+                        title,
+                        html: typeof raw.html === 'string' ? raw.html : blocksToHtml(raw.blocks),
+                    },
+                };
+            case 'table': {
+                const columns = Array.isArray(raw.columns) ? raw.columns : [];
+                const rows = Array.isArray(raw.rows) ? raw.rows : [];
+                return {
                     type: 'table',
-                    withHeadings: Boolean(block.data.withHeadings),
-                    content: rows.map((row) => (Array.isArray(row) ? row.map(String).join('\t') : '')).join('\n'),
+                    enabled,
+                    payload: {
+                        title,
+                        columns: columns.map((column, i) => {
+                            const item = column as Record<string, unknown> | null;
+                            const type = item?.type;
+                            return {
+                                key: String(item?.key ?? `col_${i + 1}`),
+                                label: String(item?.label ?? ''),
+                                type: type === 'number' || type === 'money' ? type : 'text',
+                            };
+                        }),
+                        rows: rows.map((row) => (Array.isArray(row) ? row.map((cell) => String(cell ?? '')) : [])),
+                        price_column: typeof raw.price_column === 'string' ? raw.price_column : null,
+                        include_in_total: Boolean(raw.include_in_total),
+                    },
                 };
             }
-            return { ...base, type: 'paragraph', text: String(block.data.text ?? '') };
-        });
-    }
-
-    type SectionPayload = {
-        title?: string | null;
-        label?: string;
-        stages?: { title: string; duration: string }[];
-        items?: { name: string; period: string; price: string }[];
-        columns?: { key: string; label: string }[];
-        rows?: string[][];
-        price_column?: string | null;
-        include_in_total?: boolean;
-        [key: string]: unknown;
-    };
-
-    interface SectionRow {
-        type: SectionType;
-        enabled: boolean;
-        payload: SectionPayload;
-        /** Редактируемое представление для custom-секций. */
-        blocks?: CustomBlock[];
+            case 'license': {
+                const items = Array.isArray(raw.items) ? raw.items : [];
+                return {
+                    type: 'license',
+                    enabled,
+                    payload: {
+                        title,
+                        items: items.map((license) => {
+                            const item = license as Record<string, unknown> | null;
+                            return {
+                                name: String(item?.name ?? ''),
+                                period: String(item?.period ?? ''),
+                                price: String(item?.price ?? ''),
+                            };
+                        }),
+                    },
+                };
+            }
+            case 'price_badge':
+            default:
+                return { type: 'price_badge', enabled, payload: { label: String(raw.label ?? '') } };
+        }
     }
 
     let title = $state('');
@@ -122,8 +173,11 @@
     let managerPhone = $state<string | null>(null);
     let note = $state<string | null>(null);
     let projectId = $state<number | ''>('');
-    let items = $state<ItemRow[]>([]);
     let sections = $state<SectionRow[]>([]);
+    /** Свёрнутость карточек по индексу секции. */
+    let openMap = $state<boolean[]>([]);
+    /** Базовый снимок формы для отслеживания несохранённых изменений. */
+    let baseline = '';
 
     $effect(() => {
         const draft = proposal?.draft;
@@ -136,12 +190,20 @@
         managerEmail = draft.manager_email;
         managerPhone = draft.manager_phone;
         note = draft.note;
-        items = draft.items.map((i) => ({ ...i }));
-        sections = draft.sections.map((s) => ({
-            ...s,
-            payload: structuredClone(s.payload),
-            ...(s.type === 'custom' ? { blocks: parseBlocks(s.payload) } : {}),
-        }));
+        let parsed = draft.sections.map(parseSection);
+        // Миграция legacy-черновиков: позиции лежали топ-уровнем — переносим
+        // их в блок «Позиции» первым, дальше сохранится уже секцией.
+        if (parsed.every((section) => section.type !== 'items') && draft.items.length > 0) {
+            parsed = [
+                { type: 'items', enabled: true, payload: { title: 'Позиции', items: draft.items.map((i) => ({ ...i })) } },
+                ...parsed,
+            ];
+        }
+        sections = parsed;
+        openMap = parsed.map(() => true);
+        // snapshot() читает редактируемое состояние — читаем в untrack, иначе
+        // эффект зависит от полей формы и зацикливается (read-after-write).
+        baseline = untrack(() => snapshot());
     });
 
     $effect(() => {
@@ -149,71 +211,22 @@
     });
 
     // -- Клиентский предпросмотр сумм (не доверенные значения, §7.2) ----------
-    function toCents(value: string): number {
-        const [r, k = ''] = value.replace(',', '.').split('.');
-        return parseInt(r || '0', 10) * 100 + parseInt((k + '00').slice(0, 2), 10);
-    }
-
-    function lineAmount(quantity: string, price: string): number {
-        // Предпросмотр: half-up на строку; окончательный расчёт — сервер.
-        return Math.round(parseFloat(quantity.replace(',', '.')) * toCents(price));
-    }
-
     const previewTotals = $derived.by(() => {
         let min = 0;
         let max = 0;
-        for (const item of items) {
-            min += lineAmount(item.quantity_min, item.unit_price);
-            max += lineAmount(item.quantity_max, item.unit_price);
+        for (const section of sections) {
+            if (section.type !== 'items' || !section.enabled) continue;
+            for (const item of section.payload.items) {
+                min += lineAmount(item.quantity_min, item.unit_price);
+                max += lineAmount(item.quantity_max, item.unit_price);
+            }
         }
         const fmt = (cents: number): string => (cents / 100).toFixed(2);
         return { min: fmt(min), max: fmt(max) };
     });
 
-    function addItem() {
-        items = [...items, { catalog_item_id: null, name: '', description: null, unit: 'ч', quantity_min: '1', quantity_max: '1', unit_price: '0.00' }];
-    }
-
     // -- Picker номенклатуры -----------------------------------------------------
-    let pickerOpen = $state(false);
-    let pickerQuery = $state('');
-    let pickerResults = $state<CatalogItemOption[]>([]);
 
-    async function runCatalogSearch() {
-        const params = new URLSearchParams();
-        if (pickerQuery.trim() !== '') params.set('q', pickerQuery.trim());
-        const response = await fetch(`${catalogSearch.url()}?${params.toString()}`, {
-            headers: { Accept: 'application/json' },
-        });
-        if (!response.ok) return;
-        const data = (await response.json()) as { items: CatalogItemOption[] };
-        pickerResults = data.items;
-    }
-
-    function openPicker() {
-        pickerOpen = true;
-        pickerQuery = '';
-        pickerResults = [];
-        void runCatalogSearch();
-    }
-
-    function pickItem(option: CatalogItemOption) {
-        items = [
-            ...items,
-            {
-                catalog_item_id: option.id,
-                name: option.name,
-                description: option.description,
-                unit: option.unit ?? 'шт',
-                quantity_min: '1',
-                quantity_max: '1',
-                unit_price: option.price,
-            },
-        ];
-        pickerOpen = false;
-    }
-
-    // -- Обновление связанных строк из справочника (план §7.3) --------------------
     let diffEntries = $state<CatalogDiffEntry[] | null>(null);
 
     async function showCatalogDiff() {
@@ -230,62 +243,124 @@
         diffEntries = null;
     }
 
-    function removeItem(index: number) {
-        items = items.filter((_, i) => i !== index);
-    }
-
-    function moveItem(index: number, delta: number) {
-        const target = index + delta;
-        if (target < 0 || target >= items.length) return;
-        const next = [...items];
-        [next[index], next[target]] = [next[target], next[index]];
-        items = next;
-    }
-
     // -- Секции ----------------------------------------------------------------
-    const sectionLabels: Record<SectionType, string> = {
-        stages: 'Этапы работ',
-        custom: 'Текстовый блок',
-        table: 'Произвольная таблица',
-        license: 'Лицензии и расходы',
-        price_badge: 'Примечание по цене',
-    };
+    const sectionTypeOrder: SectionType[] = ['items', 'stages', 'custom', 'table', 'license', 'price_badge'];
+
+    function createSection(type: SectionType): SectionRow {
+        switch (type) {
+            case 'items':
+                return {
+                    type,
+                    enabled: true,
+                    payload: {
+                        title: 'Позиции',
+                        items: [{ catalog_item_id: null, name: '', description: null, unit: 'ч', quantity_min: '1', quantity_max: '1', unit_price: '0.00' }],
+                    },
+                };
+            case 'stages':
+                return { type, enabled: true, payload: { title: 'Этапы работ', stages: [{ title: '', duration: '' }] } };
+            case 'custom':
+                return { type, enabled: true, payload: { title: null, html: '' } };
+            case 'table':
+                return {
+                    type,
+                    enabled: true,
+                    payload: {
+                        title: null,
+                        columns: [{ key: 'col_1', label: 'Наименование', type: 'text' }],
+                        rows: [['']],
+                        price_column: null,
+                        include_in_total: false,
+                    },
+                };
+            case 'license':
+                return { type, enabled: true, payload: { title: 'Лицензии и расходы', items: [{ name: '', period: 'в месяц', price: '0.00' }] } };
+            case 'price_badge':
+                return { type, enabled: true, payload: { label: 'Стоимость по запросу' } };
+        }
+    }
 
     function addSection(type: SectionType) {
-        const payloads: Record<SectionType, Record<string, unknown>> = {
-            stages: { title: 'Этапы работ', stages: [{ title: '', duration: '' }] },
-            custom: { title: null, blocks: [] },
-            table: { title: null, columns: [{ key: 'name', label: 'Наименование' }], rows: [], price_column: null, include_in_total: false },
-            license: { title: 'Лицензии и расходы', items: [{ name: '', period: 'в месяц', price: '0.00' }] },
-            price_badge: { label: 'Стоимость по запросу' },
-        };
-        sections = [
-            ...sections,
-            {
-                type,
-                enabled: true,
-                payload: payloads[type],
-                ...(type === 'custom' ? { blocks: [emptyBlock('paragraph')] } : {}),
-            },
-        ];
+        sections = [...sections, createSection(type)];
+        openMap = [...openMap, true];
     }
 
     function removeSection(index: number) {
+        const section = sections[index];
+        if (sectionHasContent(section) && !confirm(`Удалить блок «${sectionLabels[section.type]}»? Введённые данные будут потеряны.`)) {
+            return;
+        }
         sections = sections.filter((_, i) => i !== index);
+        openMap = openMap.filter((_, i) => i !== index);
     }
 
-    // -- Одноразовая ссылка ------------------------------------------------------
+    function moveSection(index: number, delta: number) {
+        const target = index + delta;
+        if (target < 0 || target >= sections.length) return;
+        const next = [...sections];
+        [next[index], next[target]] = [next[target], next[index]];
+        sections = next;
+        const opens = [...openMap];
+        [opens[index], opens[target]] = [opens[target], opens[index]];
+        openMap = opens;
+    }
+
+    // -- Порядок блоков перетаскиванием ------------------------------------------
+    let dragIndex: number | null = $state(null);
+    let overIndex: number | null = $state(null);
+
+    function dropSection() {
+        if (dragIndex === null || overIndex === null || dragIndex === overIndex) {
+            dragIndex = null;
+            overIndex = null;
+            return;
+        }
+        const next = [...sections];
+        const [moved] = next.splice(dragIndex, 1);
+        next.splice(overIndex, 0, moved);
+        sections = next;
+        const opens = [...openMap];
+        const [movedOpen] = opens.splice(dragIndex, 1);
+        opens.splice(overIndex, 0, movedOpen);
+        openMap = opens;
+        dragIndex = null;
+        overIndex = null;
+    }
+
+    // -- Одноразовая ссылка / несохранённые изменения ----------------------------
     // Flash приходит событием router (Inertia отдаёт его один раз и не хранит
     // в history state), а не через page.props — как и тосты в flash-toast.ts.
-    onMount(() =>
-        router.on('flash', (event) => {
+    onMount(() => {
+        const offFlash = router.on('flash', (event) => {
             const issued = (event as CustomEvent<{ flash?: { issued?: IssuedFlash | null } }>).detail?.flash?.issued;
 
             if (issued) {
                 alert(`Публичная ссылка (показывается один раз):\n\n${issued.url}\n\nСкопируйте её сейчас. При утрате — замените ссылку.`);
             }
-        }),
-    );
+        });
+
+        const offBefore = router.on('before', (event) => {
+            if (!dirty || !proposal) return;
+            // Сохранение/выпуск — не уход со страницы, подтверждение не нужно
+            if (event.detail.visit.url.toString().includes(`/proposals/${proposal.id}`)) return;
+            if (!window.confirm('Есть несохранённые изменения. Покинуть страницу без сохранения?')) {
+                event.preventDefault();
+            }
+        });
+
+        return () => {
+            offFlash();
+            offBefore();
+        };
+    });
+
+    // Предупреждение при закрытии/перезагрузке вкладки с несохранёнными данными
+    $effect(() => {
+        if (!dirty) return;
+        const handler = (event: BeforeUnloadEvent) => event.preventDefault();
+        window.addEventListener('beforeunload', handler);
+        return () => window.removeEventListener('beforeunload', handler);
+    });
 
     // -- Сериализация -------------------------------------------------------------
     function buildPayload(): Record<string, import('@inertiajs/core').FormDataConvertible> {
@@ -300,67 +375,54 @@
             note,
             project_id: projectId === '' ? null : projectId,
             lock_version: proposal?.draft?.lock_version ?? 1,
-            items: items.map((item) => ({
-                catalog_item_id: item.catalog_item_id,
-                name: item.name,
-                description: item.description,
-                unit: item.unit,
-                quantity_min: item.quantity_min,
-                quantity_max: item.quantity_max,
-                unit_price: item.unit_price,
-            })),
             sections: sections.map((section) => ({
                 type: section.type,
                 enabled: section.enabled,
-                payload: normalizePayload(section),
+                payload: toWirePayload(section),
             })),
             // Произвольный вложенный JSON payload — транспорт допускает его,
         } as Record<string, import('@inertiajs/core').FormDataConvertible>;
     }
 
-    function normalizePayload(section: SectionRow): Record<string, unknown> {
-        if (section.type === 'custom') {
-            const blocks = section.blocks ?? [];
-            return {
-                title: (section.payload.title as string | null) ?? null,
-                blocks: blocks.map((block) => {
-                    if (block.type === 'paragraph') return { type: 'paragraph', data: { text: block.text } };
-                    if (block.type === 'header') return { type: 'header', data: { text: block.text, level: block.level } };
-                    if (block.type === 'list') {
-                        return {
-                            type: 'list',
-                            data: {
-                                style: block.style,
-                                items: block.items.split('\n').map((s) => s.trim()).filter(Boolean),
-                            },
-                        };
-                    }
-                    return {
-                        type: 'table',
-                        data: {
-                            withHeadings: block.withHeadings,
-                            content: block.content
-                                .split('\n')
-                                .filter((line) => line.trim() !== '')
-                                .map((line) => line.split('\t')),
-                        },
-                    };
-                }),
-            };
+    function toWirePayload(section: SectionRow): Record<string, unknown> {
+        switch (section.type) {
+            case 'items':
+                return {
+                    title: section.payload.title ?? null,
+                    // Пустой placeholder-ряд (только что добавленный блок) не шлём —
+                    // серверная валидация требует имя, пустые ряды — мусор.
+                    items: section.payload.items
+                        .filter((item) => item.name.trim() !== '')
+                        .map((item) => ({
+                        catalog_item_id: item.catalog_item_id,
+                        name: item.name,
+                        description: item.description,
+                        unit: item.unit,
+                        quantity_min: item.quantity_min,
+                        quantity_max: item.quantity_max,
+                        unit_price: item.unit_price,
+                    })),
+                };
+            case 'custom':
+                return { title: section.payload.title ?? null, html: section.payload.html };
+            case 'table':
+                return {
+                    title: section.payload.title ?? null,
+                    columns: section.payload.columns.map((column) => ({ key: column.key, label: column.label, type: column.type })),
+                    rows: section.payload.rows,
+                    price_column: section.payload.price_column,
+                    include_in_total: section.payload.include_in_total,
+                };
+            default:
+                return { ...section.payload };
         }
-
-        if (section.type === 'table') {
-            return {
-                title: (section.payload.title as string | null) ?? null,
-                columns: (section.payload.columns as { key: string; label: string }[]) ?? [],
-                rows: (section.payload.rows as string[][]) ?? [],
-                price_column: (section.payload.price_column as string | null) ?? null,
-                include_in_total: Boolean(section.payload.include_in_total),
-            };
-        }
-
-        return section.payload;
     }
+
+    function snapshot(): string {
+        return JSON.stringify({ ...buildPayload(), lock_version: undefined });
+    }
+
+    const dirty = $derived(snapshot() !== baseline);
 
     function saveAndIssue() {
         if (!proposal) return;
@@ -376,28 +438,6 @@
     function onConflict() {
         alert('Черновик изменён другим пользователем или уже выпущен. Сейчас страница обновится — скопируйте введённые данные.');
         router.reload();
-    }
-
-    /** Произвольная таблица: редактируемые представления по умолчанию. */
-    function tableColumnsText(section: SectionRow): string {
-        const columns = (section.payload.columns as { key: string; label: string }[]) ?? [];
-        return columns.map((c) => `${c.key}:${c.label}`).join('\n');
-    }
-
-    function parseTableColumns(text: string): { key: string; label: string }[] {
-        return text
-            .split('\n')
-            .map((line) => line.trim())
-            .filter(Boolean)
-            .map((line) => {
-                const [key = '', ...rest] = line.split(':');
-                return { key: key.trim(), label: (rest.join(':') || key).trim() };
-            });
-    }
-
-    function tableRowsText(section: SectionRow): string {
-        const rows = (section.payload.rows as string[][]) ?? [];
-        return rows.map((row) => row.map(String).join('\t')).join('\n');
     }
 </script>
 
@@ -470,13 +510,21 @@
         <Form
             {...update.form(proposal)}
             options={{ preserveScroll: true }}
+            onSuccess={() => toast.success('Черновик сохранён')}
+            onError={() => toast.error('Не удалось сохранить — проверьте отмеченные поля')}
             transform={(data) => ({ ...data, ...buildPayload() })}
         >
             {#snippet children({ errors, processing })}
+                {#if Object.keys(errors).length > 0}
+                    <div class="rounded-md border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive" role="alert" data-test="form-error-banner">
+                        Не удалось сохранить черновик. Проверьте отмеченные поля.
+                    </div>
+                {/if}
+
                 <div class="grid gap-4 md:grid-cols-2">
                     <div class="grid gap-2 md:col-span-2">
                         <Label for="title">Название документа</Label>
-                        <Input id="title" name="title" bind:value={title} required maxlength={500} />
+                        <Input id="title" name="title" bind:value={title} required maxlength={500} aria-invalid={Boolean(errors.title)} />
                         <InputError message={errors.title} />
                     </div>
                     <div class="grid gap-2 md:col-span-2">
@@ -522,45 +570,35 @@
 
                 <div class="mt-8">
                     <div class="mb-3 flex items-center justify-between gap-2">
-                        <h2 class="text-base font-medium">Позиции</h2>
+                        <h2 class="text-base font-medium">Блоки</h2>
                         {#if canEdit}
-                            <div class="flex flex-wrap gap-2">
-                                <Button type="button" size="sm" variant="outline" onclick={openPicker} data-test="add-from-catalog">
-                                    Из справочника
-                                </Button>
+                            <div class="flex flex-wrap items-center gap-2">
                                 <Button type="button" size="sm" variant="outline" onclick={showCatalogDiff} data-test="refresh-from-catalog">
                                     Обновить из справочника
                                 </Button>
-                                <Button type="button" size="sm" variant="outline" onclick={addItem} data-test="add-item">Добавить позицию</Button>
+                                <DropdownMenu>
+                                    <DropdownMenuTrigger asChild>
+                                        {#snippet children(trigger)}
+                                            <Button type="button" size="sm" variant="outline" {...trigger} data-test="add-block">
+                                                <Plus class="size-4" />
+                                                Добавить блок
+                                            </Button>
+                                        {/snippet}
+                                    </DropdownMenuTrigger>
+                                    <DropdownMenuContent align="end" class="w-64">
+                                        {#each sectionTypeOrder as type (type)}
+                                            <DropdownMenuItem onclick={() => addSection(type)}>
+                                                <div class="grid gap-0.5 py-0.5">
+                                                    <span>{sectionLabels[type]}</span>
+                                                    <span class="text-xs text-muted-foreground">{sectionHints[type]}</span>
+                                                </div>
+                                            </DropdownMenuItem>
+                                        {/each}
+                                    </DropdownMenuContent>
+                                </DropdownMenu>
                             </div>
                         {/if}
                     </div>
-
-                    {#if pickerOpen}
-                        <div class="mb-3 rounded-lg border border-line p-3" data-test="catalog-picker">
-                            <div class="flex gap-2">
-                                <Input bind:value={pickerQuery} placeholder="Поиск по номенклатуре" oninput={() => void runCatalogSearch()} class="flex-1" />
-                                <Button type="button" size="sm" variant="ghost" onclick={() => (pickerOpen = false)}>Закрыть</Button>
-                            </div>
-                            <div class="mt-2 divide-y divide-border">
-                                {#each pickerResults as option (option.id)}
-                                    <button
-                                        type="button"
-                                        class="flex w-full items-center justify-between gap-2 px-2 py-2 text-left text-sm hover:bg-muted"
-                                        onclick={() => pickItem(option)}
-                                    >
-                                        <span>
-                                            {option.name}
-                                            {#if option.category}<span class="text-muted-foreground">· {option.category}</span>{/if}
-                                        </span>
-                                        <span class="tabular-nums text-muted-foreground">{formatMoney(option.price)}</span>
-                                    </button>
-                                {:else}
-                                    <p class="px-2 py-3 text-sm text-muted-foreground">Ничего не найдено</p>
-                                {/each}
-                            </div>
-                        </div>
-                    {/if}
 
                     {#if diffEntries !== null}
                         <div class="mb-3 rounded-lg border border-line p-3" data-test="catalog-diff">
@@ -617,226 +655,72 @@
                             </div>
                         </div>
                     {/if}
-                    <div class="overflow-x-auto rounded-lg border border-line">
-                        <table class="w-full text-sm">
-                            <thead>
-                            <tr class="border-b border-line text-left text-muted-foreground">
-                                <th class="px-3 py-2 font-medium">Название</th>
-                                <th class="w-20 px-3 py-2 font-medium">Ед.</th>
-                                <th class="w-24 px-3 py-2 font-medium">Мин</th>
-                                <th class="w-24 px-3 py-2 font-medium">Макс</th>
-                                <th class="w-28 px-3 py-2 font-medium">Цена</th>
-                                <th class="px-3 py-2 text-right font-medium">Действия</th>
-                            </tr>
-                            </thead>
-                            <tbody>
-                            {#each items as item, index (index)}
-                                <tr class="border-b border-line last:border-0">
-                                    <td class="px-3 py-2">
-                                        <Input bind:value={item.name} placeholder="Название работы" data-test="item-name" />
-                                        {#if item.catalog_item_id}
-                                            <span class="mt-1 inline-block rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">из справочника</span>
-                                        {/if}
-                                    </td>
-                                    <td class="px-3 py-2"><Input bind:value={item.unit} /></td>
-                                    <td class="px-3 py-2"><Input bind:value={item.quantity_min} inputmode="decimal" /></td>
-                                    <td class="px-3 py-2"><Input bind:value={item.quantity_max} inputmode="decimal" /></td>
-                                    <td class="px-3 py-2"><Input bind:value={item.unit_price} inputmode="decimal" /></td>
-                                    <td class="px-3 py-2 text-right">
-                                        {#if canEdit}
-                                            <div class="flex justify-end gap-1">
-                                                <Button type="button" size="sm" variant="ghost" disabled={index === 0} onclick={() => moveItem(index, -1)}>↑</Button>
-                                                <Button type="button" size="sm" variant="ghost" disabled={index === items.length - 1} onclick={() => moveItem(index, 1)}>↓</Button>
-                                                <Button type="button" size="sm" variant="ghost" onclick={() => removeItem(index)}>×</Button>
+
+                    {#if sections.length === 0}
+                        <div class="rounded-lg border border-dashed border-line px-4 py-8 text-center text-sm text-muted-foreground" data-test="sections-empty">
+                            Блоков пока нет. Нажмите «Добавить блок», чтобы вставить позиции, этапы, текст или таблицу.
+                        </div>
+                    {:else}
+                        <div class="space-y-4">
+                            {#each sections as section, index (index)}
+                                <SectionCard
+                                    {index}
+                                    total={sections.length}
+                                    label={sectionLabels[section.type]}
+                                    hint={sectionHints[section.type]}
+                                    bind:enabled={section.enabled}
+                                    bind:open={openMap[index]}
+                                    {canEdit}
+                                    hasContent={sectionHasContent(section)}
+                                    dragging={dragIndex === index}
+                                    dragOver={dragIndex !== null && overIndex === index && dragIndex !== index}
+                                    ondelete={() => removeSection(index)}
+                                    onmove={(delta) => moveSection(index, delta)}
+                                    ondragstart={() => (dragIndex = index)}
+                                    ondragend={() => {
+                                        dragIndex = null;
+                                        overIndex = null;
+                                    }}
+                                    ondragover={() => (overIndex = index)}
+                                    ondrop={dropSection}
+                                >
+                                    {#snippet body()}
+                                        {#if section.type === 'items'}
+                                            <ItemsBlock bind:items={section.payload.items} {canEdit} errors={extractSectionErrors(errors, index)} />
+                                        {:else if section.type === 'stages'}
+                                            <StagesBlock bind:stages={section.payload.stages} {canEdit} errors={extractSectionErrors(errors, index)} />
+                                        {:else if section.type === 'custom'}
+                                            <RichTextBlock bind:html={section.payload.html} {canEdit} />
+                                        {:else if section.type === 'table'}
+                                            <TableBlock bind:payload={section.payload} {canEdit} errors={extractSectionErrors(errors, index)} />
+                                        {:else if section.type === 'license'}
+                                            <LicenseBlock bind:items={section.payload.items} {canEdit} errors={extractSectionErrors(errors, index)} />
+                                        {:else}
+                                            <div class="grid gap-2">
+                                                <Label for="price-badge-{index}">Текст примечания</Label>
+                                                <Input
+                                                    id="price-badge-{index}"
+                                                    bind:value={section.payload.label}
+                                                    placeholder="Например: Стоимость по запросу"
+                                                    disabled={!canEdit}
+                                                    aria-invalid={Boolean(extractSectionErrors(errors, index)['label'])}
+                                                />
+                                                <InputError message={extractSectionErrors(errors, index)['label']} />
                                             </div>
                                         {/if}
-                                    </td>
-                                </tr>
+                                    {/snippet}
+                                </SectionCard>
                             {/each}
-                            </tbody>
-                        </table>
-                    </div>
-                    <div class="mt-2 text-sm text-muted-foreground" data-test="totals-preview">
-                        Предварительный итог: {formatMoney(previewTotals.min)}
-                        {#if previewTotals.min !== previewTotals.max} – {formatMoney(previewTotals.max)}{/if}
-                        (окончательный считает сервер)
-                    </div>
-                </div>
+                        </div>
+                    {/if}
 
-                <div class="mt-8">
-                    <div class="mb-3 flex items-center justify-between">
-                        <h2 class="text-base font-medium">Блоки</h2>
-                        {#if canEdit}
-                            <div class="flex flex-wrap gap-2">
-                                {#each Object.entries(sectionLabels) as [type, label] (type)}
-                                    <Button type="button" size="sm" variant="outline" onclick={() => addSection(type as SectionType)}>+ {label}</Button>
-                                {/each}
-                            </div>
-                        {/if}
-                    </div>
-                    <div class="space-y-4">
-                        {#each sections as section, index (index)}
-                            <div class="rounded-lg border border-line p-4" data-test="section-block">
-                                <div class="mb-3 flex items-center justify-between">
-                                    <div class="flex items-center gap-3">
-                                        <input type="checkbox" bind:checked={section.enabled} aria-label="Показывать блок" />
-                                        <span class="text-sm font-medium">{sectionLabels[section.type]}</span>
-                                    </div>
-                                    {#if canEdit}
-                                        <Button type="button" size="sm" variant="ghost" onclick={() => removeSection(index)}>Удалить блок</Button>
-                                    {/if}
-                                </div>
-
-                                {#if section.type === 'stages'}
-                                    <div class="space-y-2">
-                                        {#each section.payload.stages as stage, stageIndex (stageIndex)}
-                                            <div class="flex gap-2">
-                                                <Input bind:value={stage.title} placeholder="Этап" class="flex-1" />
-                                                <Input bind:value={stage.duration} placeholder="Срок" class="w-40" />
-                                                {#if canEdit}
-                                                    <Button type="button" size="sm" variant="ghost"
-                                                        onclick={() => (section.payload.stages = (section.payload.stages ?? []).filter((_, i) => i !== stageIndex))}>
-                                                        ×
-                                                    </Button>
-                                                {/if}
-                                            </div>
-                                        {/each}
-                                        {#if canEdit}
-                                            <Button type="button" size="sm" variant="outline"
-                                                onclick={() => (section.payload.stages = [...(section.payload.stages ?? []), { title: '', duration: '' }])}>
-                                                Добавить этап
-                                            </Button>
-                                        {/if}
-                                    </div>
-                                {:else if section.type === 'price_badge'}
-                                    <Input bind:value={section.payload.label} placeholder="Текст примечания" disabled={!canEdit} />
-                                {:else if section.type === 'custom'}
-                                    <div class="space-y-3">
-                                        {#each section.blocks ?? [] as block, blockIndex (blockIndex)}
-                                            <div class="rounded border border-line p-3">
-                                                <div class="mb-2 flex items-center gap-2">
-                                                    <select
-                                                        bind:value={block.type}
-                                                        class="rounded-md border border-line bg-background px-2 py-1.5 text-sm"
-                                                        disabled={!canEdit}
-                                                    >
-                                                        <option value="paragraph">Абзац</option>
-                                                        <option value="header">Заголовок</option>
-                                                        <option value="list">Список</option>
-                                                        <option value="table">Таблица</option>
-                                                    </select>
-                                                    {#if canEdit}
-                                                        <Button type="button" size="sm" variant="ghost"
-                                                            onclick={() => (section.blocks = (section.blocks ?? []).filter((_: unknown, i: number) => i !== blockIndex))}>
-                                                            ×
-                                                        </Button>
-                                                    {/if}
-                                                </div>
-                                                {#if block.type === 'paragraph'}
-                                                    <textarea bind:value={block.text} rows="3" placeholder="Текст абзаца" class="w-full rounded-md border border-line bg-background px-3 py-2 text-sm"></textarea>
-                                                {:else if block.type === 'header'}
-                                                    <div class="flex gap-2">
-                                                        <Input bind:value={block.text} placeholder="Заголовок" class="flex-1" disabled={!canEdit} />
-                                                        <select bind:value={block.level} class="rounded-md border border-line bg-background px-2 py-2 text-sm" disabled={!canEdit}>
-                                                            <option value={1}>H1</option>
-                                                            <option value={2}>H2</option>
-                                                            <option value={3}>H3</option>
-                                                            <option value={4}>H4</option>
-                                                        </select>
-                                                    </div>
-                                                {:else if block.type === 'list'}
-                                                    <div class="flex gap-2">
-                                                        <select bind:value={block.style} class="rounded-md border border-line bg-background px-2 py-2 text-sm" disabled={!canEdit}>
-                                                            <option value="unordered">Маркированный</option>
-                                                            <option value="ordered">Нумерованный</option>
-                                                        </select>
-                                                    </div>
-                                                    <textarea bind:value={block.items} rows="4" placeholder="Пункты списка — каждый с новой строки" class="mt-2 w-full rounded-md border border-line bg-background px-3 py-2 text-sm"></textarea>
-                                                {:else if block.type === 'table'}
-                                                    <label class="flex items-center gap-2 text-sm">
-                                                        <input type="checkbox" bind:checked={block.withHeadings} disabled={!canEdit} /> Первая строка — заголовки
-                                                    </label>
-                                                    <textarea bind:value={block.content} rows="4" placeholder="Строки таблицы; ячейки через Tab" class="mt-2 w-full rounded-md border border-line bg-background px-3 py-2 text-sm"></textarea>
-                                                {/if}
-                                            </div>
-                                        {/each}
-                                        {#if canEdit}
-                                            <Button type="button" size="sm" variant="outline"
-                                                onclick={() => (section.blocks = [...(section.blocks ?? []), emptyBlock('paragraph')])}>
-                                                Добавить блок
-                                            </Button>
-                                        {/if}
-                                    </div>
-                                {:else if section.type === 'table'}
-                                    <div class="grid gap-3 md:grid-cols-2">
-                                        <div class="grid gap-1">
-                                            <Label>Колонки (key:название, каждая с новой строки)</Label>
-                                            <textarea
-                                                value={tableColumnsText(section)}
-                                                oninput={(e) => (section.payload.columns = parseTableColumns((e.target as HTMLTextAreaElement).value))}
-                                                rows="4"
-                                                class="w-full rounded-md border border-line bg-background px-3 py-2 text-sm"
-                                                disabled={!canEdit}
-                                            ></textarea>
-                                        </div>
-                                        <div class="grid gap-1">
-                                            <Label>Строки (ячейки через Tab)</Label>
-                                            <textarea
-                                                value={tableRowsText(section)}
-                                                oninput={(e) => (section.payload.rows = ((e.target as HTMLTextAreaElement).value
-                                                    .split('\n').filter((line) => line.trim() !== '').map((line) => line.split('\t'))))}
-                                                rows="4"
-                                                class="w-full rounded-md border border-line bg-background px-3 py-2 text-sm"
-                                                disabled={!canEdit}
-                                            ></textarea>
-                                        </div>
-                                    </div>
-                                    <div class="mt-3 flex items-center gap-4">
-                                        <Label class="flex items-center gap-2">
-                                            Ценовая колонка
-                                            <select
-                                                value={(section.payload.price_column as string | null) ?? ''}
-                                                onchange={(e) => (section.payload.price_column = (e.target as HTMLSelectElement).value || null)}
-                                                class="rounded-md border border-line bg-background px-2 py-1.5 text-sm"
-                                                disabled={!canEdit}
-                                            >
-                                                <option value="">—</option>
-                                                {#each (section.payload.columns as { key: string }[]) ?? [] as column (column.key)}
-                                                    <option value={column.key}>{column.key}</option>
-                                                {/each}
-                                            </select>
-                                        </Label>
-                                        <Label class="flex items-center gap-2">
-                                            <input type="checkbox" bind:checked={section.payload.include_in_total} disabled={!canEdit} />
-                                            Включать в итог
-                                        </Label>
-                                    </div>
-                                {:else if section.type === 'license'}
-                                    <div class="space-y-2">
-                                        {#each section.payload.items as license, licenseIndex (licenseIndex)}
-                                            <div class="flex gap-2">
-                                                <Input bind:value={license.name} placeholder="Услуга" class="flex-1" disabled={!canEdit} />
-                                                <Input bind:value={license.period} placeholder="Период" class="w-32" disabled={!canEdit} />
-                                                <Input bind:value={license.price} placeholder="0.00" class="w-28" inputmode="decimal" disabled={!canEdit} />
-                                                {#if canEdit}
-                                                    <Button type="button" size="sm" variant="ghost"
-                                                        onclick={() => (section.payload.items = (section.payload.items ?? []).filter((_, i) => i !== licenseIndex))}>
-                                                        ×
-                                                    </Button>
-                                                {/if}
-                                            </div>
-                                        {/each}
-                                        {#if canEdit}
-                                            <Button type="button" size="sm" variant="outline"
-                                                onclick={() => (section.payload.items = [...(section.payload.items ?? []), { name: '', period: 'в месяц', price: '0.00' }])}>
-                                                Добавить услугу
-                                            </Button>
-                                        {/if}
-                                    </div>
-                                {/if}
-                            </div>
-                        {/each}
-                    </div>
+                    {#if sections.some((section) => section.type === 'items')}
+                        <div class="mt-3 text-sm text-muted-foreground" data-test="totals-preview">
+                            Предварительный итог: {formatMoney(previewTotals.min)}
+                            {#if previewTotals.min !== previewTotals.max} – {formatMoney(previewTotals.max)}{/if}
+                            (окончательный считает сервер)
+                        </div>
+                    {/if}
                 </div>
 
                 <div class="mt-8 grid gap-2">
@@ -847,12 +731,17 @@
 
                 <div class="mt-8 flex flex-wrap items-center gap-3">
                     {#if canEdit}
-                        <Button type="submit" disabled={processing} data-test="save-draft">Сохранить черновик</Button>
+                        <Button type="submit" disabled={processing} data-test="save-draft">
+                            {processing ? 'Сохранение…' : 'Сохранить черновик'}
+                        </Button>
                     {/if}
                     {#if canIssue}
                         <Button type="button" variant="outline" disabled={processing} onclick={saveAndIssue} data-test="issue-proposal">
                             Сохранить и выпустить КП
                         </Button>
+                    {/if}
+                    {#if dirty}
+                        <span class="text-xs text-muted-foreground" data-test="dirty-hint">Есть несохранённые изменения</span>
                     {/if}
                     {#if canEdit}
                         <Button type="button" variant="ghost" disabled={processing}

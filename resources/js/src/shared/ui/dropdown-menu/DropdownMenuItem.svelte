@@ -1,8 +1,8 @@
 <script lang="ts">
     import type { Snippet } from 'svelte';
     import { getContext } from 'svelte';
-    import { cn } from '@/shared/lib/utils';
     import { DROPDOWN_MENU_CONTEXT, type DropdownMenuContext } from './context';
+    import { cn } from '@/shared/lib/utils';
 
     type AsChildProps = {
         class?: string;
@@ -13,16 +13,21 @@
     let {
         asChild = false,
         class: className = '',
+        onclick,
         children,
     }: {
         asChild?: boolean;
         class?: string;
+        onclick?: () => void;
         children?: Snippet<[AsChildProps]>;
     } = $props();
 
     const { setOpen } = getContext<DropdownMenuContext>(DROPDOWN_MENU_CONTEXT);
 
-    const handleClick = () => setOpen(false);
+    const handleClick = () => {
+        onclick?.();
+        setOpen(false);
+    };
 
     const classes = () =>
         cn(

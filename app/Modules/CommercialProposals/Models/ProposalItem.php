@@ -13,6 +13,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  *
  * @property int $id
  * @property int $version_id
+ * @property int|null $section_id секция-блок items; NULL — legacy top-level строки
  * @property int|null $catalog_item_id
  * @property int $position
  * @property string $name

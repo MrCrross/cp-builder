@@ -15,6 +15,8 @@ final class SectionPayloadValidator
 {
     private const MAX_STRING = 10_000;
 
+    private const MAX_HTML = 50_000;
+
     /**
      * @param  array<string, mixed>  $payload
      * @return array<string, mixed> нормализованный payload
@@ -23,7 +25,7 @@ final class SectionPayloadValidator
      */
     public static function validate(SectionType $type, array $payload): array
     {
-        $validator = validator($payload, self::rules($type));
+        $validator = validator($payload, self::rules($type), self::messages());
 
         if ($validator->fails()) {
             throw new ValidationException($validator);
@@ -48,6 +50,19 @@ final class SectionPayloadValidator
         ];
 
         return match ($type) {
+            // Позиции прайса — полноценный блок: строки валидируем здесь
+            // структурно, деньги/количества доменными VO — в SaveDraftAction.
+            SectionType::Items => [
+                'title' => $short,
+                'items' => 'nullable|array|max:500',
+                'items.*.catalog_item_id' => 'nullable|integer|exists:catalog_items,id',
+                'items.*.name' => 'required|string|max:500',
+                'items.*.description' => 'nullable|string|max:2000',
+                'items.*.unit' => 'nullable|string|max:50',
+                'items.*.quantity_min' => 'required|string|regex:/^\d+(\.\d{1,2})?$/',
+                'items.*.quantity_max' => 'required|string|regex:/^\d+(\.\d{1,2})?$/',
+                'items.*.unit_price' => 'required|string|regex:/^\d+(\.\d{1,2})?$/',
+            ],
             SectionType::Stages => [
                 'title' => $short,
                 'stages' => 'required|array|max:50',
@@ -56,6 +71,10 @@ final class SectionPayloadValidator
             ],
             SectionType::Custom => [
                 'title' => $short,
+                // Новый формат текстового блока: один HTML-документ (санитайзер —
+                // EditorJsRenderer::renderHtml). Legacy-блоки ниже сохраняются
+                // для ранее созданных документов.
+                'html' => 'nullable|string|max:'.self::MAX_HTML,
                 'blocks' => $editorBlocks,
                 ...$editorBlockShape,
                 'blocks.*.data.text' => 'nullable|string|max:'.self::MAX_STRING,
@@ -73,6 +92,9 @@ final class SectionPayloadValidator
                 'columns' => 'required|array|min:1|max:20',
                 'columns.*.key' => 'required|string|max:100',
                 'columns.*.label' => 'required|string|max:500',
+                // Тип содержимого — подсказка UI для ввода (текст/число/деньги);
+                // старые документы без type валидны.
+                'columns.*.type' => 'nullable|in:text,number,money',
                 'rows' => 'nullable|array|max:500',
                 'rows.*' => 'array|max:20',
                 'rows.*.*' => 'nullable|string|max:'.self::MAX_STRING,
@@ -92,5 +114,49 @@ final class SectionPayloadValidator
                 'text' => 'nullable|string|max:'.self::MAX_STRING,
             ],
         };
+    }
+
+    /**
+     * Понятные менеджеру сообщения: без технических имён полей и ключей.
+     *
+     * @return array<string, string>
+     */
+    private static function messages(): array
+    {
+        return [
+            'title.max' => 'Название блока слишком длинное (максимум 500 символов).',
+            'html.max' => 'Текстовый блок слишком большой (максимум 50 000 символов).',
+
+            'items.max' => 'Слишком много строк в блоке (максимум 500).',
+            'items.required' => 'Добавьте хотя бы одну строку.',
+            'items.*.name.required' => 'Укажите название.',
+            'items.*.name.max' => 'Название слишком длинное (максимум 500 символов).',
+            'items.*.quantity_min.required' => 'Укажите минимальное количество.',
+            'items.*.quantity_min.regex' => 'Количество должно быть числом, например 2 или 1.5.',
+            'items.*.quantity_max.required' => 'Укажите максимальное количество.',
+            'items.*.quantity_max.regex' => 'Количество должно быть числом, например 2 или 1.5.',
+            'items.*.unit_price.required' => 'Укажите цену.',
+            'items.*.unit_price.regex' => 'Цена должна быть числом, например 1200.00.',
+
+            'stages.required' => 'Добавьте хотя бы один этап.',
+            'stages.*.title.required' => 'Укажите название этапа.',
+            'stages.*.title.max' => 'Название этапа слишком длинное (максимум 500 символов).',
+            'stages.*.duration.required' => 'Укажите срок этапа.',
+            'stages.*.duration.max' => 'Срок этапа слишком длинный (максимум 500 символов).',
+
+            'columns.required' => 'Добавьте хотя бы одну колонку.',
+            'columns.min' => 'Добавьте хотя бы одну колонку.',
+            'columns.*.key.required' => 'Укажите название колонки.',
+            'columns.*.label.required' => 'Укажите название колонки.',
+            'columns.*.label.max' => 'Название колонки слишком длинное (максимум 500 символов).',
+            'columns.*.type.in' => 'Неизвестный тип колонки.',
+            'price_column.max' => 'Ценовая колонка указана некорректно.',
+
+            'items.*.period.required' => 'Укажите период.',
+            'items.*.price.required' => 'Укажите стоимость.',
+            'items.*.price.regex' => 'Стоимость должна быть числом, например 1200.00.',
+
+            'label.required' => 'Укажите текст примечания.',
+        ];
     }
 }

@@ -13,6 +13,7 @@ use App\Modules\Catalog\Requests\UpdateCatalogItemRequest;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
@@ -97,7 +98,28 @@ class CatalogItemsController extends Controller
         $items = CatalogItem::query()
             ->with('category:id,name')
             ->where('active', true)
-            ->when($q !== '', fn ($query) => $query->where('name', 'like', "%{$q}%"))
+            ->when($q !== '', function ($query) use ($q) {
+                // Поиск по названию и по свойствам номенклатуры. CAST(... AS TEXT)
+                // совместим и с pgsql (jsonb), и с sqlite (json-текст) в тестах.
+                // Группировка в замыкании: без неё OR «утекал» бы мимо active = true.
+                // Регистровые варианты: sqlite lower()/like не переводят
+                // кириллицу, а свойства часто в верхнем регистре (ДН100);
+                // pgsql-lower с кириллицей работает, варианты ему не мешают.
+                // json-cast Laravel хранит кириллицу экранированной (\u0414...),
+                // поэтому добавляем и json-экранированную форму запроса.
+                $jsonEscaped = (string) preg_replace_callback(
+                    '/[^\x20-\x7E]/u',
+                    fn (array $m): string => '\u'.str_pad(dechex(mb_ord($m[0])), 4, '0', STR_PAD_LEFT),
+                    $q,
+                );
+
+                $query->where(fn ($inner) => $inner
+                    ->where('name', 'like', "%{$q}%")
+                    ->orWhereRaw('cast(properties as text) like ?', ["%{$q}%"])
+                    ->orWhereRaw('cast(properties as text) like ?', ['%'.mb_strtolower($q).'%'])
+                    ->orWhereRaw('cast(properties as text) like ?', ['%'.mb_strtoupper($q).'%'])
+                    ->orWhereRaw('cast(properties as text) like ?', ["%{$jsonEscaped}%"]));
+            })
             ->orderBy('name')
             ->limit(20)
             ->get()
@@ -108,14 +130,16 @@ class CatalogItemsController extends Controller
                 'unit' => $item->unit,
                 'price' => $item->price,
                 'category' => $item->category?->name,
+                'properties' => $item->properties ?? [],
             ]);
 
         return response()->json(['items' => $items]);
     }
 
     /**
-     * Отдача картинок импорта из storage (план §13.1): только пути вида
-     * imports/<source>/<sha256>.<ext>, авторизованным пользователям каталога.
+     * Отдача картинок из storage (план §13.1): пути импорта вида
+     * imports/<source>/<sha256>.<ext> и ручных загрузок catalog/<sha256>.<ext>,
+     * авторизованным пользователям каталога.
      */
     public function image(Request $request): \Symfony\Component\HttpFoundation\Response
     {
@@ -123,7 +147,7 @@ class CatalogItemsController extends Controller
 
         $path = (string) $request->query('path', '');
 
-        abort_unless(preg_match('#^imports/[a-z0-9]+/[a-f0-9]{64}\.[a-z0-9]+$#i', $path) === 1, 404);
+        abort_unless(preg_match('#^(imports/[a-z0-9]+/[a-f0-9]{64}|catalog/[a-f0-9]{64})\.[a-z0-9]+$#i', $path) === 1, 404);
         abort_unless(Storage::disk('local')->exists($path), 404);
 
         return Storage::disk('local')->response($path);
@@ -131,7 +155,7 @@ class CatalogItemsController extends Controller
 
     public function store(StoreCatalogItemRequest $request, CreateCatalogItemAction $action): RedirectResponse
     {
-        /** @var array{name: string, category_id?: ?int, description?: ?string, unit?: ?string, price: string, active?: bool} $validated */
+        /** @var array{name: string, category_id?: ?int, description?: ?string, unit?: ?string, price: string, active?: bool, image?: UploadedFile|null} $validated */
         $validated = $request->validated();
 
         $action->execute($request->user(), $validated);
@@ -143,7 +167,7 @@ class CatalogItemsController extends Controller
 
     public function update(UpdateCatalogItemRequest $request, CatalogItem $item, UpdateCatalogItemAction $action): RedirectResponse
     {
-        /** @var array{name: string, category_id?: ?int, description?: ?string, unit?: ?string, price: string, active?: bool} $validated */
+        /** @var array{name: string, category_id?: ?int, description?: ?string, unit?: ?string, price: string, active?: bool, image?: UploadedFile|null, remove_image?: bool} $validated */
         $validated = $request->validated();
 
         $action->execute($request->user(), $item, $validated);
