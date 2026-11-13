@@ -3,8 +3,8 @@
 namespace App\Modules\Statistics\Providers;
 
 use App\Modules\Statistics\Console\PruneStatisticsCommand;
-use App\Modules\Statistics\Domain\ValueObjects\StatisticsArea;
 use App\Modules\Statistics\Policies\StatisticsPolicy;
+use App\Modules\Statistics\Support\StatisticsArea;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\ServiceProvider;
 

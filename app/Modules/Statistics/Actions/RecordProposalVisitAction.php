@@ -5,14 +5,13 @@ namespace App\Modules\Statistics\Actions;
 use App\Modules\CommercialProposals\Domain\Enums\ProposalStatus;
 use App\Modules\CommercialProposals\Models\Proposal;
 use App\Modules\Statistics\Domain\Enums\DimensionType;
-use App\Modules\Statistics\Domain\Services\BotClassifier;
-use App\Modules\Statistics\Domain\Services\DeviceClassifier;
-use App\Modules\Statistics\Domain\Services\OsClassifier;
 use App\Modules\Statistics\Models\StatisticsDailyDimension;
 use App\Modules\Statistics\Models\StatisticsDailyProposal;
 use App\Modules\Statistics\Models\StatisticsDailyUnique;
 use App\Modules\Statistics\Models\StatisticsMeta;
 use App\Modules\Statistics\Models\StatisticsVisit;
+use App\Modules\Statistics\Support\UaProfile;
+use App\Modules\Statistics\Support\UaProfileResolver;
 use Carbon\CarbonInterface;
 use Illuminate\Support\Facades\DB;
 
@@ -25,6 +24,13 @@ use Illuminate\Support\Facades\DB;
  */
 class RecordProposalVisitAction
 {
+    private UaProfileResolver $uaResolver;
+
+    public function __construct(?UaProfileResolver $uaResolver = null)
+    {
+        $this->uaResolver = $uaResolver ?? new UaProfileResolver;
+    }
+
     public function execute(
         Proposal $proposal,
         ?string $ip,
@@ -41,24 +47,24 @@ class RecordProposalVisitAction
 
         $visitedAt ??= now();
         $date = $visitedAt->toDateString();
-        $isBot = BotClassifier::isBot($userAgent);
+        $uaProfile = $this->uaResolver->resolve($userAgent);
 
-        DB::transaction(function () use ($proposal, $ip, $userAgent, $visitedAt, $date, $isBot): void {
+        DB::transaction(function () use ($proposal, $ip, $userAgent, $visitedAt, $date, $uaProfile): void {
             StatisticsVisit::query()->create([
                 'proposal_id' => $proposal->id,
                 'visited_at' => $visitedAt,
-                'is_bot' => $isBot,
-                'device_type' => DeviceClassifier::detect($userAgent),
-                'os' => OsClassifier::detect($userAgent),
+                'is_bot' => $uaProfile->isBot,
+                'device_type' => $uaProfile->deviceType,
+                'os' => $uaProfile->os,
                 'visitor_hash' => $this->visitorHash($proposal, $date, $ip, $userAgent),
                 'created_at' => $visitedAt,
             ]);
 
-            $this->upsertDailyAggregate($proposal, $date, $isBot);
+            $this->upsertDailyAggregate($proposal, $date, $uaProfile->isBot);
 
-            if (! $isBot) {
+            if (! $uaProfile->isBot) {
                 $this->registerUniqueVisitor($proposal, $date, $ip, $userAgent);
-                $this->upsertDimensions($proposal, $date, $userAgent);
+                $this->upsertDimensions($proposal, $date, $uaProfile);
             }
 
             $meta = StatisticsMeta::query()->first() ?? new StatisticsMeta;
@@ -122,13 +128,13 @@ class RecordProposalVisitAction
         }
     }
 
-    private function upsertDimensions(Proposal $proposal, string $date, ?string $userAgent): void
+    private function upsertDimensions(Proposal $proposal, string $date, UaProfile $uaProfile): void
     {
         $now = now();
 
         foreach ([
-            [DimensionType::DeviceType, DeviceClassifier::detect($userAgent)],
-            [DimensionType::Os, OsClassifier::detect($userAgent)],
+            [DimensionType::DeviceType, $uaProfile->deviceType],
+            [DimensionType::Os, $uaProfile->os],
         ] as [$dimension, $value]) {
             StatisticsDailyDimension::query()->upsert(
                 [[

@@ -3,7 +3,7 @@
 namespace App\Modules\Statistics\Policies;
 
 use App\Models\User;
-use App\Modules\Statistics\Domain\ValueObjects\StatisticsArea;
+use App\Modules\Statistics\Support\StatisticsArea;
 
 /**
  * Дашборд статистики: administrator и manager (permission statistics.view);

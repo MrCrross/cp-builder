@@ -130,6 +130,15 @@
 4. В dev-БД остались smoke-данные прогонов e2e (синтетика с меткой E2E).
 5. Перенос legacy `kp_visits` — только по отдельному запросу и только агрегатами (12.2), не делался.
 
+## Реструктуризация модулей и замена UA-классификаторов (2026-11-13)
+
+Выполнен план `docs/module-restructure-plan.md` (вариант В, ADR-0012):
+
+- **Структура модулей**: `app/Modules/*` переведены на плоскую раскладку в стиле skeleton'а Laravel-app — `Providers/`, `Models/`, `Actions/`, `Controllers/`, `Requests/`, `Policies/`, `Contracts/`, `Data/`, `Support/`, `Adapters/`; `Domain/{Enums,ValueObjects,Services,Exceptions}` остался только в CommercialProposals, Imports, Statistics (чистый PHP без Laravel). Слои `Application`/`Authorization`/`Infrastructure` упразднены. ADR-0004 приведён в соответствие.
+- **`DocumentNumberGenerator`** переведён с сырых `DB::table()` на новую Eloquent-модель `CommercialProposals/Models/DocumentCounter` (raw остался только `pg_advisory_xact_lock`). Поведение нумерации не менялось.
+- **UA-классификаторы заменены на matomo/device-detector** (addendum ADR-0011): `BotClassifier`/`DeviceClassifier`/`OsClassifier` удалены, единая точка входа — `Statistics/Support/UaProfileResolver` (нормализация в прежние coarse-наборы isBot/device_type/os; семантика «пустой UA = бот» и сигнатуры HTTP-клиентов сохранены явно). Domain Statistics схлопнулся до `Domain/Enums/DimensionType`; `StatisticsArea` → `Support/`. Датасет и ожидаемые значения тестов не изменились (`UaProfileResolverTest`).
+- Проверки: **Pest 240 passed**, PHPStan 0 errors, Pint PASS. Новая прямая зависимость записана в `docs/dependencies.md` (matomo/device-detector ^6.5, LGPL-3.0).
+
 ## Следующие шаги
 
 1. §6 (Bitrix24/1С) — только после test portal и примеров выгрузок; приём 1С идёт через готовый Imports pipeline (upload до 5 файлов за job уже поддерживает чанки цикла обмена).

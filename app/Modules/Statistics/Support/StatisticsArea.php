@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Modules\Statistics\Domain\ValueObjects;
+namespace App\Modules\Statistics\Support;
 
 /**
  * Маркерная область авторизации дашборда статистики: Policy привязан к
