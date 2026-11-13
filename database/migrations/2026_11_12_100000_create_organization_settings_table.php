@@ -1,6 +1,7 @@
 <?php
 
 use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\QueryException;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -23,7 +24,13 @@ return new class extends Migration
             $table->timestamps();
         });
 
-        DB::statement('alter table organization_settings add constraint organization_settings_single_row check (id = 1)');
+        // CHECK применяется на PostgreSQL; sqlite ≥ 3.53 понимает синтаксис,
+        // старше — пропускаем enforcement (см. .ai/rules/backend.md).
+        try {
+            DB::statement('alter table organization_settings add constraint organization_settings_single_row check (id = 1)');
+        } catch (QueryException) {
+            // SQLite < 3.53: ALTER TABLE ADD CONSTRAINT не поддерживается.
+        }
     }
 
     public function down(): void

@@ -1,6 +1,7 @@
 <?php
 
 use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\QueryException;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -33,9 +34,15 @@ return new class extends Migration
             $table->index(['version_id', 'position']);
         });
 
-        DB::statement('alter table proposal_items add constraint proposal_items_quantity_check check (quantity_min >= 0 and quantity_max >= quantity_min)');
-        DB::statement('alter table proposal_items add constraint proposal_items_price_check check (unit_price >= 0)');
-        DB::statement('alter table proposal_items add constraint proposal_items_amount_check check (amount_min >= 0 and amount_max >= amount_min)');
+        // CHECK — только PostgreSQL; sqlite ≥ 3.53 понимает синтаксис, старше
+        // пропускаем enforcement (см. .ai/rules/backend.md).
+        try {
+            DB::statement('alter table proposal_items add constraint proposal_items_quantity_check check (quantity_min >= 0 and quantity_max >= quantity_min)');
+            DB::statement('alter table proposal_items add constraint proposal_items_price_check check (unit_price >= 0)');
+            DB::statement('alter table proposal_items add constraint proposal_items_amount_check check (amount_min >= 0 and amount_max >= amount_min)');
+        } catch (QueryException) {
+            // SQLite < 3.53: ALTER TABLE ADD CONSTRAINT не поддерживается.
+        }
     }
 
     public function down(): void

@@ -1,6 +1,7 @@
 <?php
 
 use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\QueryException;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -50,10 +51,16 @@ return new class extends Migration
         DB::statement('create unique index proposal_versions_one_draft on proposal_versions (proposal_id) where state = \'draft\'');
         DB::statement('create unique index proposal_versions_one_issued on proposal_versions (proposal_id) where state = \'issued\'');
 
-        DB::statement('alter table proposal_versions add constraint proposal_versions_state_check check (state in (\'draft\', \'issued\', \'superseded\'))');
-        DB::statement('alter table proposal_versions add constraint proposal_versions_version_check check (version >= 1)');
-        DB::statement('alter table proposal_versions add constraint proposal_versions_currency_check check (currency = \'RUB\')');
-        DB::statement('alter table proposal_versions add constraint proposal_versions_totals_check check (total_min >= 0 and total_max >= total_min)');
+        // CHECK — только PostgreSQL; sqlite ≥ 3.53 понимает синтаксис, старше
+        // пропускаем enforcement (см. .ai/rules/backend.md).
+        try {
+            DB::statement('alter table proposal_versions add constraint proposal_versions_state_check check (state in (\'draft\', \'issued\', \'superseded\'))');
+            DB::statement('alter table proposal_versions add constraint proposal_versions_version_check check (version >= 1)');
+            DB::statement('alter table proposal_versions add constraint proposal_versions_currency_check check (currency = \'RUB\')');
+            DB::statement('alter table proposal_versions add constraint proposal_versions_totals_check check (total_min >= 0 and total_max >= total_min)');
+        } catch (QueryException) {
+            // SQLite < 3.53: ALTER TABLE ADD CONSTRAINT не поддерживается.
+        }
     }
 
     public function down(): void

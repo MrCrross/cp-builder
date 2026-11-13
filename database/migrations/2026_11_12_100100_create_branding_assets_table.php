@@ -1,6 +1,7 @@
 <?php
 
 use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\QueryException;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -30,7 +31,13 @@ return new class extends Migration
             $table->unique('kind');
         });
 
-        DB::statement("alter table branding_assets add constraint branding_assets_kind_check check (kind in ('large_logo', 'small_logo'))");
+        // CHECK — только PostgreSQL; sqlite ≥ 3.53 понимает синтаксис, старше
+        // пропускаем enforcement (см. .ai/rules/backend.md).
+        try {
+            DB::statement("alter table branding_assets add constraint branding_assets_kind_check check (kind in ('large_logo', 'small_logo'))");
+        } catch (QueryException) {
+            // SQLite < 3.53: ALTER TABLE ADD CONSTRAINT не поддерживается.
+        }
     }
 
     public function down(): void

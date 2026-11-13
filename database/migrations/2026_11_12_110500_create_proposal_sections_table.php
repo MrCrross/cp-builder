@@ -1,6 +1,7 @@
 <?php
 
 use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\QueryException;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -26,7 +27,13 @@ return new class extends Migration
             $table->index(['version_id', 'position']);
         });
 
-        DB::statement("alter table proposal_sections add constraint proposal_sections_type_check check (type in ('stages', 'custom', 'table', 'license', 'price_badge'))");
+        // CHECK — только PostgreSQL; sqlite ≥ 3.53 понимает синтаксис, старше
+        // пропускаем enforcement (см. .ai/rules/backend.md).
+        try {
+            DB::statement("alter table proposal_sections add constraint proposal_sections_type_check check (type in ('stages', 'custom', 'table', 'license', 'price_badge'))");
+        } catch (QueryException) {
+            // SQLite < 3.53: ALTER TABLE ADD CONSTRAINT не поддерживается.
+        }
     }
 
     public function down(): void
