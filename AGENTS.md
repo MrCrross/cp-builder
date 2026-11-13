@@ -51,6 +51,7 @@ MSYS_NO_PATHCONV=1 docker run --rm -v "//c/Users/stas/Desktop/projects/cp-builde
 - Коммиты и пуш — только по явному запросу пользователя; `docs/` в gitignore (локальные рабочие материалы).
 - `.ai/rules` — path-scoped правила агентов (в репо, читаются Boost-правилом перед правкой файлов); `.ai/mcp/` — локальный MCP-конфиг (в gitignore); `vp check` игнорирует `.ai/**` (fmt.ignorePatterns в `vite.config.ts`).
 - Fixtures — только синтетика (`example.test`, вымышленные названия), никаких реальных данных.
+- Windows/Git Bash: папка `C:` в корне репо — артефакт psysh/tinker (path-mangling MSYS), НЕ создавать и удалять немедленно, если появилась (`rm -rf ./C:`). Профилактика: tinker только с `-e HOME=/tmp` (см. §Проверки), `docker run -v` только как `//c/...` с `MSYS_NO_PATHCONV=1`. Подробности — user-скилл `windows-path-guardrails`.
 
 <laravel-boost-guidelines>
 === foundation rules ===
