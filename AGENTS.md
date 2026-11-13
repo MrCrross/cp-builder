@@ -6,15 +6,17 @@
 
 - Backend-модули: `app/Modules/<Name>` (Identity, AuditLog, Catalog, Projects, CompanySettings, CommercialProposals, Statistics, Imports). Плоская структура в стиле skeleton'а Laravel-app: `Providers/<Name>ServiceProvider.php`, `Models/` (Eloquent), `Actions/` (вся бизнес-логика, контроллеры тонкие), `Contracts/`, `Data/`, `Controllers/`, `Requests/`, `Policies/`, `Support/` (инфраструктурные помощники: рендереры, генераторы, процессоры), `Adapters/` (внешние форматы, у Imports). `Domain/` (только CommercialProposals, Imports, Statistics) — чистый PHP без зависимостей от Laravel: `Domain/{Enums,ValueObjects,Services,Exceptions}`. `Jobs/`, `Console/` — без изменений.
 - Frontend (FSD): `resources/js/src/{app,pages,shared}`; DTO и форматтеры — `shared/api`; страницы — `pages/<name>/`.
-- Анимированные UI-компоненты (`shared/ui/`) — порты с designbookmark.com/motion: `file-drop`, `loading-button`, `password-strength`, `switch`, `confirm-dialog`, пружинный сайдбар; пружинный движок — `shared/lib/spring.svelte.ts` (stiffness/damping портированы из `tokens.css` источника, движение 1:1). HoldButton НЕ переносить — отклонён владельцем. Подтверждения действий — ТОЛЬКО через программный сервис `confirmDialog()` из `shared/ui/confirm-dialog/confirm.svelte` (Promise<boolean>; единый диалог рендерит `ConfirmHost` в `AppSidebarLayout`); `window.confirm` запрещён. `ConfirmDialog.svelte` — презентационный слой для нестандартного содержимого (snippets children/footer).
+- Анимированные UI-компоненты (`shared/ui/`) — порты с designbookmark.com/motion: `file-drop`, `loading-button`, `password-strength`, `switch`, `confirm-dialog`, пружинный сайдбар; пружинный движок — `shared/lib/spring.svelte.ts` (stiffness/damping портированы из `tokens.css` источника, движение 1:1). HoldButton НЕ переносить — отклонён владельцем. Подтверждения действий — ТОЛЬКО через программный сервис `confirmDialog()` из `shared/ui/confirm-dialog/confirm.svelte` (Promise<boolean>; единый диалог рендерит `ConfirmHost` в `AppSidebarLayout`); `window.confirm` запрещён. `ConfirmDialog.svelte` — презентационный слой для нестандартного содержимого (snippets children/footer). Пагинация — единый компонент `shared/ui/pagination` (Inertia `router.get`, русские подписи из `lang/ru/pagination.php`); `Button` рендерит `<a>` при передаче `href`.
 - Маршруты во фронте — через Wayfinder (`@/routes/...`). НИКОГДА не запускать `wayfinder:generate` без `--with-form` — это ломает типы `*.form()` во всём фронте.
 
 ## Ключевые инварианты
 
 - Деньги — только VO `Money`/`Quantity` (целые копейки, bcmath); float для денег запрещён.
 - Выпущенные (issued) версии КП иммутабельны: запрет update/delete на уровне pgsql-триггера + application-уровень; переход issued→superseded разрешён.
-- Публичный токен — base64url 32 байта, в БД только sha256; полный token возвращается ОДИН раз при первом выпуске (дальше null — ссылка постоянная); замена ссылки = rotate со старым token → 404.
-- Inertia flash (`Inertia::flash('issued'|'toast', ...)`) читается на фронте ТОЛЬКО событием `router.on('flash')` — в `page.props.flash` данных нет (см. `shared/lib/flash-toast.ts`, `pages/proposal-edit`).
+- Версии КП живут в ветках (git-модель, `proposal_branches.current_version_id` — указатель ветки): одна main-ветка на КП (partial unique), черновик один на ветку; постоянная main-ссылка (`public_links.branch_id is null`) резолвится через main-ветку и авто-обновляется при выпуске на ней; форк (`ForkBranchAction`) отделяет любую версию в ветку со своей ссылкой; promote (`PromoteBranchAction`) переносит is_main — демоутнутая ветка остаётся без ссылки. Публичный резолв — `PublicProposalController::resolve()`.
+- Миграции SQLite: `change()`/`dropColumn` пересоздают таблицу и её индексы через grammar, КОТОРАЯ ТЕРЯЕТ WHERE partial unique index. Все raw partial-индексы (`proposal_versions_one_draft/one_issued`, `proposal_branches_one_main`, `public_links_one_active_*`) создавать ПОСЛЕ любых Schema::table-изменений этих таблиц (см. порядок в `2026_11_14_000000_create_proposal_branches`).
+- Публичный токен — base64url 32 байта, хранится в БД целиком (`public_links.token`, колонка nullable: у строк до миграции `2026_11_14_100000_add_token_to_public_links` токен не сохранён — ссылка работает, URL появляется после rotate) + sha256 (`token_hash`, lookup по маршруту). Одноразовых показов нет: URL ссылки доступен в пейлоаде редактора (`public_url` на КП и на каждой ветке) и копируется в любой момент. Замена ссылки = rotate (`RotatePublicLinkAction` — только main-ссылка, ссылки веток не трогает): старый token → 404.
+- Inertia flash (`Inertia::flash('toast', ...)`) читается на фронте ТОЛЬКО событием `router.on('flash')` — в `page.props.flash` данных нет (см. `shared/lib/flash-toast.ts`).
 - Публичный рендер `/kp/{token}` — Blade + strict-рендерер блоков; пользовательский контент только через санитайзер; `Cache-Control: no-store`.
 
 ## Проверки (через Docker, из корня репо)
@@ -47,7 +49,7 @@ MSYS_NO_PATHCONV=1 docker run --rm -v "//c/Users/stas/Desktop/projects/cp-builde
 
 - Новые прямые зависимости — только с записью в `docs/dependencies.md` (CI-сверка).
 - Коммиты и пуш — только по явному запросу пользователя; `docs/` в gitignore (локальные рабочие материалы).
-- `.ai/` — локальные правила/настройки агентов (в gitignore, не коммитить); `vp check` игнорирует `.ai/**` (fmt.ignorePatterns в `vite.config.ts`).
+- `.ai/rules` — path-scoped правила агентов (в репо, читаются Boost-правилом перед правкой файлов); `.ai/mcp/` — локальный MCP-конфиг (в gitignore); `vp check` игнорирует `.ai/**` (fmt.ignorePatterns в `vite.config.ts`).
 - Fixtures — только синтетика (`example.test`, вымышленные названия), никаких реальных данных.
 
 <laravel-boost-guidelines>
