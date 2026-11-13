@@ -2,15 +2,15 @@
 
 use App\Models\AuditEntry;
 use App\Models\User;
-use App\Modules\Catalog\Application\Actions\CreateCatalogItemAction;
-use App\Modules\Catalog\Application\Actions\UpdateCatalogItemAction;
-use App\Modules\Catalog\Infrastructure\Persistence\CatalogItem;
-use App\Modules\CommercialProposals\Application\Actions\CreateDraftProposalAction;
-use App\Modules\CommercialProposals\Application\Actions\DraftCatalogDiffAction;
-use App\Modules\CommercialProposals\Application\Actions\IssueProposalAction;
-use App\Modules\CommercialProposals\Application\Actions\RefreshDraftItemsFromCatalogAction;
-use App\Modules\CommercialProposals\Application\Actions\SaveDraftAction;
-use App\Modules\Projects\Infrastructure\Persistence\Project;
+use App\Modules\Catalog\Actions\CreateCatalogItemAction;
+use App\Modules\Catalog\Actions\UpdateCatalogItemAction;
+use App\Modules\Catalog\Models\CatalogItem;
+use App\Modules\CommercialProposals\Actions\CreateDraftProposalAction;
+use App\Modules\CommercialProposals\Actions\DraftCatalogDiffAction;
+use App\Modules\CommercialProposals\Actions\IssueProposalAction;
+use App\Modules\CommercialProposals\Actions\RefreshDraftItemsFromCatalogAction;
+use App\Modules\CommercialProposals\Actions\SaveDraftAction;
+use App\Modules\Projects\Models\Project;
 use Database\Seeders\BaselineSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Spatie\Permission\Models\Role;

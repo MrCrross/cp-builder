@@ -2,16 +2,16 @@
 
 use App\Http\Controllers\Admin\AuditLogController;
 use App\Http\Controllers\Admin\UsersController;
-use App\Modules\Catalog\Http\Controllers\CatalogCategoriesController;
-use App\Modules\Catalog\Http\Controllers\CatalogItemsController;
-use App\Modules\CommercialProposals\Http\Controllers\ProposalsController;
-use App\Modules\CommercialProposals\Http\Controllers\ProposalTemplatesController;
-use App\Modules\CommercialProposals\Http\Controllers\PublicProposalController;
-use App\Modules\CompanySettings\Http\Controllers\BrandingAssetController;
-use App\Modules\CompanySettings\Http\Controllers\OrganizationSettingsController;
-use App\Modules\Imports\Http\Controllers\ImportsController;
-use App\Modules\Projects\Http\Controllers\ProjectsController;
-use App\Modules\Statistics\Http\Controllers\StatisticsController;
+use App\Modules\Catalog\Controllers\CatalogCategoriesController;
+use App\Modules\Catalog\Controllers\CatalogItemsController;
+use App\Modules\CommercialProposals\Controllers\ProposalsController;
+use App\Modules\CommercialProposals\Controllers\ProposalTemplatesController;
+use App\Modules\CommercialProposals\Controllers\PublicProposalController;
+use App\Modules\CompanySettings\Controllers\BrandingAssetController;
+use App\Modules\CompanySettings\Controllers\OrganizationSettingsController;
+use App\Modules\Imports\Controllers\ImportsController;
+use App\Modules\Projects\Controllers\ProjectsController;
+use App\Modules\Statistics\Controllers\StatisticsController;
 use Illuminate\Support\Facades\Route;
 
 Route::inertia('/', 'Welcome')->name('home');

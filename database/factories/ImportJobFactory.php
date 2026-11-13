@@ -3,9 +3,9 @@
 namespace Database\Factories;
 
 use App\Models\User;
-use App\Modules\Imports\Domain\ImportJobStatus;
-use App\Modules\Imports\Domain\ImportProfile;
-use App\Modules\Imports\Infrastructure\Persistence\ImportJob;
+use App\Modules\Imports\Domain\Enums\ImportJobStatus;
+use App\Modules\Imports\Domain\Enums\ImportProfile;
+use App\Modules\Imports\Models\ImportJob;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
 /**

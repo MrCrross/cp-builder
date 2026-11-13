@@ -2,13 +2,13 @@
 
 use App\Models\AuditEntry;
 use App\Models\User;
-use App\Modules\Catalog\Application\Actions\CreateCatalogItemAction;
-use App\Modules\Catalog\Application\Actions\DeleteCategoryAction;
-use App\Modules\Catalog\Application\Actions\UpdateCatalogItemAction;
-use App\Modules\Catalog\Infrastructure\Persistence\CatalogCategory;
-use App\Modules\Catalog\Infrastructure\Persistence\CatalogItem;
-use App\Modules\CommercialProposals\Application\Actions\CreateDraftProposalAction;
-use App\Modules\CommercialProposals\Application\Actions\SaveDraftAction;
+use App\Modules\Catalog\Actions\CreateCatalogItemAction;
+use App\Modules\Catalog\Actions\DeleteCategoryAction;
+use App\Modules\Catalog\Actions\UpdateCatalogItemAction;
+use App\Modules\Catalog\Models\CatalogCategory;
+use App\Modules\Catalog\Models\CatalogItem;
+use App\Modules\CommercialProposals\Actions\CreateDraftProposalAction;
+use App\Modules\CommercialProposals\Actions\SaveDraftAction;
 use Database\Seeders\BaselineSeeder;
 use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Testing\RefreshDatabase;

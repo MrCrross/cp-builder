@@ -1,14 +1,14 @@
 <?php
 
 use App\Models\User;
-use App\Modules\CommercialProposals\Application\Actions\ArchiveProposalAction;
-use App\Modules\CommercialProposals\Application\Actions\CreateDraftProposalAction;
-use App\Modules\CommercialProposals\Application\Actions\IssueProposalAction;
-use App\Modules\CommercialProposals\Application\Actions\RotatePublicLinkAction;
-use App\Modules\CommercialProposals\Application\Actions\SaveDraftAction;
-use App\Modules\CommercialProposals\Infrastructure\Persistence\PublicLinkAlias;
-use App\Modules\CompanySettings\Infrastructure\Persistence\BrandingAsset;
-use App\Modules\CompanySettings\Infrastructure\Persistence\OrganizationSettings;
+use App\Modules\CommercialProposals\Actions\ArchiveProposalAction;
+use App\Modules\CommercialProposals\Actions\CreateDraftProposalAction;
+use App\Modules\CommercialProposals\Actions\IssueProposalAction;
+use App\Modules\CommercialProposals\Actions\RotatePublicLinkAction;
+use App\Modules\CommercialProposals\Actions\SaveDraftAction;
+use App\Modules\CommercialProposals\Models\PublicLinkAlias;
+use App\Modules\CompanySettings\Models\BrandingAsset;
+use App\Modules\CompanySettings\Models\OrganizationSettings;
 use Database\Seeders\BaselineSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Spatie\Permission\Models\Role;

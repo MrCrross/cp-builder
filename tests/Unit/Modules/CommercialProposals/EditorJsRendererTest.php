@@ -1,6 +1,6 @@
 <?php
 
-use App\Modules\CommercialProposals\Infrastructure\Rendering\EditorJsRenderer;
+use App\Modules\CommercialProposals\Support\EditorJsRenderer;
 
 it('renders allowed blocks with escaped text', function () {
     $html = EditorJsRenderer::render([

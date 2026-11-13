@@ -2,9 +2,9 @@
 
 namespace App\Modules\Imports\Jobs;
 
-use App\Modules\Imports\Application\Actions\ApplyImportAction;
-use App\Modules\Imports\Domain\ImportJobStatus;
-use App\Modules\Imports\Infrastructure\Persistence\ImportJob;
+use App\Modules\Imports\Actions\ApplyImportAction;
+use App\Modules\Imports\Domain\Enums\ImportJobStatus;
+use App\Modules\Imports\Models\ImportJob;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Throwable;

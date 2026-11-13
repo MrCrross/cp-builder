@@ -3,8 +3,8 @@
 namespace Database\Factories;
 
 use App\Models\User;
-use App\Modules\CommercialProposals\Infrastructure\Persistence\Proposal;
-use App\Modules\CommercialProposals\Infrastructure\Persistence\ProposalVersion;
+use App\Modules\CommercialProposals\Models\Proposal;
+use App\Modules\CommercialProposals\Models\ProposalVersion;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
 /**

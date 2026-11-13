@@ -2,8 +2,8 @@
 
 namespace Database\Factories;
 
-use App\Modules\Catalog\Infrastructure\Persistence\CatalogCategory;
-use App\Modules\Catalog\Infrastructure\Persistence\CatalogItem;
+use App\Modules\Catalog\Models\CatalogCategory;
+use App\Modules\Catalog\Models\CatalogItem;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
 /**

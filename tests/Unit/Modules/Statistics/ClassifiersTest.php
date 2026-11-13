@@ -1,8 +1,8 @@
 <?php
 
-use App\Modules\Statistics\Domain\BotClassifier;
-use App\Modules\Statistics\Domain\DeviceClassifier;
-use App\Modules\Statistics\Domain\OsClassifier;
+use App\Modules\Statistics\Domain\Services\BotClassifier;
+use App\Modules\Statistics\Domain\Services\DeviceClassifier;
+use App\Modules\Statistics\Domain\Services\OsClassifier;
 
 it('detects common bots by user agent', function (string $ua) {
     expect(BotClassifier::isBot($ua))->toBeTrue();

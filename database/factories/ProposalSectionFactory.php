@@ -2,8 +2,8 @@
 
 namespace Database\Factories;
 
-use App\Modules\CommercialProposals\Infrastructure\Persistence\ProposalSection;
-use App\Modules\CommercialProposals\Infrastructure\Persistence\ProposalVersion;
+use App\Modules\CommercialProposals\Models\ProposalSection;
+use App\Modules\CommercialProposals\Models\ProposalVersion;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
 /**

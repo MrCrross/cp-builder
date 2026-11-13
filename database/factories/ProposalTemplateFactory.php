@@ -2,7 +2,7 @@
 
 namespace Database\Factories;
 
-use App\Modules\CommercialProposals\Infrastructure\Persistence\ProposalTemplate;
+use App\Modules\CommercialProposals\Models\ProposalTemplate;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
 /**

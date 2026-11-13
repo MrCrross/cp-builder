@@ -2,8 +2,8 @@
 
 use App\Models\AuditEntry;
 use App\Models\User;
-use App\Modules\CompanySettings\Infrastructure\Persistence\BrandingAsset;
-use App\Modules\CompanySettings\Infrastructure\Persistence\OrganizationSettings;
+use App\Modules\CompanySettings\Models\BrandingAsset;
+use App\Modules\CompanySettings\Models\OrganizationSettings;
 use Database\Seeders\BaselineSeeder;
 use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Testing\RefreshDatabase;

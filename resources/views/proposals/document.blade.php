@@ -1,9 +1,9 @@
 @php
-    use App\Modules\CommercialProposals\Domain\Money;
-    use App\Modules\CommercialProposals\Infrastructure\Rendering\EditorJsRenderer;
+    use App\Modules\CommercialProposals\Domain\ValueObjects\Money;
+    use App\Modules\CommercialProposals\Support\EditorJsRenderer;
 
-    /** @var \App\Modules\CommercialProposals\Infrastructure\Persistence\ProposalVersion $version */
-    /** @var \App\Modules\CommercialProposals\Infrastructure\Persistence\Proposal $proposal */
+    /** @var \App\Modules\CommercialProposals\Models\ProposalVersion $version */
+    /** @var \App\Modules\CommercialProposals\Models\Proposal $proposal */
     $branding = $version->branding_snapshot ?? [];
     $items = $version->items;
     $sections = $version->sections->filter(fn ($s) => $s->enabled);
@@ -15,7 +15,7 @@
 
     // Произвольная таблица: итог каждой ценовой колонки; в общий итог —
     // только при одной ценовой колонке и явном include_in_total (§7.2).
-    $renderTableSection = function (\App\Modules\CommercialProposals\Infrastructure\Persistence\ProposalSection $section) use ($money): string {
+    $renderTableSection = function (\App\Modules\CommercialProposals\Models\ProposalSection $section) use ($money): string {
         $payload = $section->payload;
         $columns = $payload['columns'] ?? [];
         $rows = $payload['rows'] ?? [];

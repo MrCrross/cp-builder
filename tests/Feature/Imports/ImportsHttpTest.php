@@ -2,11 +2,11 @@
 
 use App\Models\AuditEntry;
 use App\Models\User;
-use App\Modules\Catalog\Infrastructure\ImportedImageFetcher;
-use App\Modules\Catalog\Infrastructure\Persistence\CatalogItem;
-use App\Modules\Imports\Application\Contracts\ImportedCatalogItem;
-use App\Modules\Imports\Domain\ImportJobStatus;
-use App\Modules\Imports\Infrastructure\Persistence\ImportJob;
+use App\Modules\Catalog\Models\CatalogItem;
+use App\Modules\Catalog\Support\ImportedImageFetcher;
+use App\Modules\Imports\Contracts\ImportedCatalogItem;
+use App\Modules\Imports\Domain\Enums\ImportJobStatus;
+use App\Modules\Imports\Models\ImportJob;
 use Database\Seeders\BaselineSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;

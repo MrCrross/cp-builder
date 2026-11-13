@@ -1,13 +1,13 @@
 <?php
 
-use App\Modules\AuditLog\AuditLogServiceProvider;
-use App\Modules\Catalog\CatalogServiceProvider;
-use App\Modules\CommercialProposals\CommercialProposalsServiceProvider;
-use App\Modules\CompanySettings\CompanySettingsServiceProvider;
-use App\Modules\Identity\IdentityServiceProvider;
-use App\Modules\Imports\ImportsServiceProvider;
-use App\Modules\Projects\ProjectsServiceProvider;
-use App\Modules\Statistics\StatisticsServiceProvider;
+use App\Modules\AuditLog\Providers\AuditLogServiceProvider;
+use App\Modules\Catalog\Providers\CatalogServiceProvider;
+use App\Modules\CommercialProposals\Providers\CommercialProposalsServiceProvider;
+use App\Modules\CompanySettings\Providers\CompanySettingsServiceProvider;
+use App\Modules\Identity\Providers\IdentityServiceProvider;
+use App\Modules\Imports\Providers\ImportsServiceProvider;
+use App\Modules\Projects\Providers\ProjectsServiceProvider;
+use App\Modules\Statistics\Providers\StatisticsServiceProvider;
 use App\Providers\AppServiceProvider;
 use App\Providers\FortifyServiceProvider;
 

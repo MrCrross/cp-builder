@@ -1,9 +1,9 @@
 <?php
 
-use App\Modules\Imports\Domain\ImportParseException;
-use App\Modules\Imports\Domain\ParsedItem;
-use App\Modules\Imports\Infrastructure\Xml\CommerceMlAdapter;
-use App\Modules\Imports\Infrastructure\Xml\YmlAdapter;
+use App\Modules\Imports\Adapters\CommerceMlAdapter;
+use App\Modules\Imports\Adapters\YmlAdapter;
+use App\Modules\Imports\Domain\Exceptions\ImportParseException;
+use App\Modules\Imports\Domain\ValueObjects\ParsedItem;
 
 /**
  * Synthetic fixtures по образцам реальных выгрузок (план §14.4):

@@ -1,16 +1,16 @@
 <?php
 
 use App\Models\User;
-use App\Modules\CommercialProposals\Application\Actions\ArchiveProposalAction;
-use App\Modules\CommercialProposals\Application\Actions\CreateDraftProposalAction;
-use App\Modules\CommercialProposals\Application\Actions\IssueProposalAction;
-use App\Modules\CommercialProposals\Application\Actions\SaveDraftAction;
-use App\Modules\Statistics\Application\Actions\RecordProposalVisitAction;
-use App\Modules\Statistics\Infrastructure\Persistence\StatisticsDailyDimension;
-use App\Modules\Statistics\Infrastructure\Persistence\StatisticsDailyProposal;
-use App\Modules\Statistics\Infrastructure\Persistence\StatisticsDailyUnique;
-use App\Modules\Statistics\Infrastructure\Persistence\StatisticsMeta;
-use App\Modules\Statistics\Infrastructure\Persistence\StatisticsVisit;
+use App\Modules\CommercialProposals\Actions\ArchiveProposalAction;
+use App\Modules\CommercialProposals\Actions\CreateDraftProposalAction;
+use App\Modules\CommercialProposals\Actions\IssueProposalAction;
+use App\Modules\CommercialProposals\Actions\SaveDraftAction;
+use App\Modules\Statistics\Actions\RecordProposalVisitAction;
+use App\Modules\Statistics\Models\StatisticsDailyDimension;
+use App\Modules\Statistics\Models\StatisticsDailyProposal;
+use App\Modules\Statistics\Models\StatisticsDailyUnique;
+use App\Modules\Statistics\Models\StatisticsMeta;
+use App\Modules\Statistics\Models\StatisticsVisit;
 use Database\Seeders\BaselineSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;

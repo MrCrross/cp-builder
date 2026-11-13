@@ -1,7 +1,7 @@
 <?php
 
-use App\Modules\CommercialProposals\Domain\Money;
-use App\Modules\CommercialProposals\Domain\Quantity;
+use App\Modules\CommercialProposals\Domain\ValueObjects\Money;
+use App\Modules\CommercialProposals\Domain\ValueObjects\Quantity;
 
 it('parses decimal strings with dot and comma', function () {
     expect(Money::fromDecimalString('1234.56')->toDecimalString())->toBe('1234.56')

@@ -2,7 +2,7 @@
 
 namespace App\Modules\Statistics\Console;
 
-use App\Modules\Statistics\Application\Actions\PruneStatisticsAction;
+use App\Modules\Statistics\Actions\PruneStatisticsAction;
 use Illuminate\Console\Command;
 
 class PruneStatisticsCommand extends Command

@@ -2,7 +2,7 @@
 
 namespace App\Http\Middleware;
 
-use App\Modules\CompanySettings\Application\Contracts\BrandingSnapshotPort;
+use App\Modules\CompanySettings\Contracts\BrandingSnapshotPort;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
 

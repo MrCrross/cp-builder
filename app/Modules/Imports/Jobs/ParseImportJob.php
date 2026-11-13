@@ -2,10 +2,10 @@
 
 namespace App\Modules\Imports\Jobs;
 
-use App\Modules\Imports\Application\Actions\ParseImportFileAction;
-use App\Modules\Imports\Domain\ImportJobStatus;
-use App\Modules\Imports\Domain\ImportParseException;
-use App\Modules\Imports\Infrastructure\Persistence\ImportJob;
+use App\Modules\Imports\Actions\ParseImportFileAction;
+use App\Modules\Imports\Domain\Enums\ImportJobStatus;
+use App\Modules\Imports\Domain\Exceptions\ImportParseException;
+use App\Modules\Imports\Models\ImportJob;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Throwable;

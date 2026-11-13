@@ -4,7 +4,7 @@
 
 ## Архитектура
 
-- Backend-модули: `app/Modules/CompanySettings`, `app/Modules/CommercialProposals`. Внутри модуля: `Domain` (VO, инварианты), `Application/Actions` (весь бизнес-логика, контроллеры тонкие), `Infrastructure/Persistence` (Eloquent), `Http/{Controllers,Requests,Policies}`.
+- Backend-модули: `app/Modules/<Name>` (Identity, AuditLog, Catalog, Projects, CompanySettings, CommercialProposals, Statistics, Imports). Плоская структура в стиле skeleton'а Laravel-app: `Providers/<Name>ServiceProvider.php`, `Models/` (Eloquent), `Actions/` (вся бизнес-логика, контроллеры тонкие), `Contracts/`, `Data/`, `Controllers/`, `Requests/`, `Policies/`, `Support/` (инфраструктурные помощники: рендереры, генераторы, процессоры), `Adapters/` (внешние форматы, у Imports). `Domain/` (только CommercialProposals, Imports, Statistics) — чистый PHP без зависимостей от Laravel: `Domain/{Enums,ValueObjects,Services,Exceptions}`. `Jobs/`, `Console/` — без изменений.
 - Frontend (FSD): `resources/js/src/{app,pages,shared}`; DTO и форматтеры — `shared/api`; страницы — `pages/<name>/`.
 - Маршруты во фронте — через Wayfinder (`@/routes/...`). НИКОГДА не запускать `wayfinder:generate` без `--with-form` — это ломает типы `*.form()` во всём фронте.
 

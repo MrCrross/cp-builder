@@ -1,10 +1,10 @@
 <?php
 
 use App\Models\User;
-use App\Modules\CommercialProposals\Application\Actions\CreateDraftProposalAction;
-use App\Modules\CommercialProposals\Application\Actions\SaveDraftAction;
-use App\Modules\CommercialProposals\Infrastructure\Persistence\Proposal;
-use App\Modules\CommercialProposals\Infrastructure\Persistence\ProposalTemplate;
+use App\Modules\CommercialProposals\Actions\CreateDraftProposalAction;
+use App\Modules\CommercialProposals\Actions\SaveDraftAction;
+use App\Modules\CommercialProposals\Models\Proposal;
+use App\Modules\CommercialProposals\Models\ProposalTemplate;
 use Database\Seeders\BaselineSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Spatie\Permission\Models\Role;

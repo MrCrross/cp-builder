@@ -2,9 +2,9 @@
 
 use App\Models\AuditEntry;
 use App\Models\User;
-use App\Modules\CommercialProposals\Application\Actions\CreateDraftProposalAction;
-use App\Modules\Projects\Application\Actions\DeleteProjectAction;
-use App\Modules\Projects\Infrastructure\Persistence\Project;
+use App\Modules\CommercialProposals\Actions\CreateDraftProposalAction;
+use App\Modules\Projects\Actions\DeleteProjectAction;
+use App\Modules\Projects\Models\Project;
 use Database\Seeders\BaselineSeeder;
 use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
