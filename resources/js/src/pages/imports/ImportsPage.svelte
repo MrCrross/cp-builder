@@ -13,6 +13,8 @@
     import Heading from '@/shared/ui/Heading.svelte';
     import { Badge } from '@/shared/ui/badge';
     import { Button } from '@/shared/ui/button';
+    import FileDrop from '@/shared/ui/file-drop/FileDrop.svelte';
+    import LoadingButton from '@/shared/ui/loading-button/LoadingButton.svelte';
     import { Label } from '@/shared/ui/label';
     import type { ImportJobSummary, ImportProfileOption, ImportProfileValue } from '@/shared/api';
 
@@ -43,18 +45,13 @@
     };
 
     let profile = $state<ImportProfileValue>('commerceml');
-    let files = $state<FileList | null>(null);
-    let uploading = $state(false);
-    let fileInput = $state<HTMLInputElement | null>(null);
-
-    function formatBytes(bytes: number): string {
-        if (bytes >= 1048576) return `${(bytes / 1048576).toFixed(1)} МБ`;
-        if (bytes >= 1024) return `${(bytes / 1024).toFixed(1)} КБ`;
-        return `${bytes} Б`;
-    }
+    let files = $state<File[]>([]);
+    let uploadState = $state<'idle' | 'uploading' | 'done'>('idle');
+    let uploadProgress = $state(0);
+    const uploading = $derived(uploadState === 'uploading');
 
     function submitUpload() {
-        if (!files || files.length === 0) return;
+        if (files.length === 0 || uploading) return;
 
         const data = new FormData();
         data.append('profile', profile);
@@ -62,13 +59,25 @@
             data.append('files[]', file);
         }
 
-        uploading = true;
+        uploadState = 'uploading';
+        uploadProgress = 0;
         router.post(importsStore.url(), data, {
             forceFormData: true,
+            onProgress: (event) => {
+                if (!event || !(event.total ?? 0)) {
+                    uploadProgress = event && event.loaded > 0 ? 0.9 : 0;
+                    return;
+                }
+                uploadProgress = event.loaded / (event.total as number);
+            },
+            onSuccess: () => {
+                uploadState = 'done';
+            },
             onFinish: () => {
-                uploading = false;
-                files = null;
-                if (fileInput) fileInput.value = '';
+                if (uploadState === 'uploading') {
+                    uploadState = 'idle';
+                }
+                files = [];
             },
         });
     }
@@ -107,20 +116,25 @@
             </select>
         </div>
         <div class="grid min-w-72 flex-1 gap-2">
-            <Label for="import-files">Файлы выгрузки (XML, до 5 шт., суммарно профиль один)</Label>
-            <input
-                id="import-files"
-                type="file"
-                accept=".xml,text/xml,application/xml"
-                multiple
+            <Label>Файлы выгрузки (XML, до 5 шт., суммарно профиль один)</Label>
+            <FileDrop
                 bind:files
-                bind:this={fileInput}
-                class="text-sm file:mr-3 file:rounded-md file:border-0 file:bg-accent file:px-3 file:py-1.5 file:text-sm file:text-white"
+                phase={uploadState}
+                progress={uploadProgress}
+                maxFiles={5}
+                accept=".xml,text/xml,application/xml"
+                inputId="import-files"
+                disabled={uploading}
             />
         </div>
-        <Button type="submit" disabled={uploading || !files || files.length === 0} data-test="import-upload">
-            {uploading ? 'Загрузка…' : 'Загрузить'}
-        </Button>
+        <LoadingButton
+            type="submit"
+            phase={uploadState === 'done' ? 'success' : uploadState === 'uploading' ? 'loading' : 'idle'}
+            disabled={uploading || uploadState === 'done' || files.length === 0}
+            data-test="import-upload"
+        >
+            Загрузить
+        </LoadingButton>
     </form>
 
     <div class="overflow-x-auto rounded-lg border border-line">

@@ -1,7 +1,7 @@
 <script lang="ts">
     import type { Snippet } from 'svelte';
-    import { Checkbox } from '@/shared/ui/checkbox';
     import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/shared/ui/collapsible';
+    import Switch from '@/shared/ui/switch/Switch.svelte';
     import { Button } from '@/shared/ui/button';
     import { cn } from '@/shared/lib/utils';
     import GripVertical from '@lucide/svelte/icons/grip-vertical';
@@ -11,7 +11,7 @@
     import Trash2 from '@lucide/svelte/icons/trash-2';
 
     /**
-     * Каркас карточки блока КП: порядковый номер, объединённые чекбокс и
+     * Каркас карточки блока КП: порядковый номер, объединённые переключатель и
      * название (блок можно исключить из документа), порядок (drag-ручка +
      * стрелки), сворачивание и отделённое опасное действие «Удалить блок».
      */
@@ -97,7 +97,7 @@
                 {index + 1}
             </span>
             <div class="flex min-w-0 items-center gap-2">
-                <Checkbox bind:checked={enabled} id={checkboxId} aria-label="Показывать блок в документе" />
+                <Switch bind:checked={enabled} id={checkboxId} aria-label="Показывать блок в документе" />
                 <div class="min-w-0">
                     <label for={checkboxId} class="cursor-pointer text-sm font-medium leading-tight">
                         {label}

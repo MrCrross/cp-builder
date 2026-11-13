@@ -17,6 +17,7 @@
     import Heading from '@/shared/ui/Heading.svelte';
     import { Badge } from '@/shared/ui/badge';
     import { Button } from '@/shared/ui/button';
+    import ConfirmDialog from '@/shared/ui/confirm-dialog/ConfirmDialog.svelte';
     import { Input } from '@/shared/ui/input';
     import { Label } from '@/shared/ui/label';
     import type { ProjectDetails, ProjectProposalRef } from '@/shared/api';
@@ -29,6 +30,7 @@
     let name = $state('');
     let clientName = $state('');
     let clientContact = $state('');
+    let deleteDialogOpen = $state(false);
 
     $effect(() => {
         name = project.name;
@@ -51,7 +53,6 @@
     }
 
     function removeProject() {
-        if (!confirm(`Удалить проект «${project.name}»? Проект с КП удалить нельзя.`)) return;
         router.delete(destroy.url(project));
     }
 
@@ -87,8 +88,16 @@
                 <Input id="edit-contact" bind:value={clientContact} maxlength={255} />
             </div>
             <Button onclick={saveProject} disabled={!name}>Сохранить</Button>
-            <Button variant="ghost" onclick={removeProject}>Удалить проект</Button>
+            <Button variant="ghost" onclick={() => (deleteDialogOpen = true)}>Удалить проект</Button>
         </div>
+        <ConfirmDialog
+            bind:open={deleteDialogOpen}
+            title={`Удалить проект «${project.name}»?`}
+            description="Проект с КП удалить нельзя. Действие необратимо."
+            variant="danger"
+            confirmText="Удалить"
+            onconfirm={removeProject}
+        />
     {:else}
         <p class="text-sm text-muted-foreground">
             Клиент: {project.client_name ?? '—'} · Контакт: {project.client_contact ?? '—'}

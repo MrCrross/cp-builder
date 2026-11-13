@@ -6,6 +6,7 @@
 
 - Backend-модули: `app/Modules/<Name>` (Identity, AuditLog, Catalog, Projects, CompanySettings, CommercialProposals, Statistics, Imports). Плоская структура в стиле skeleton'а Laravel-app: `Providers/<Name>ServiceProvider.php`, `Models/` (Eloquent), `Actions/` (вся бизнес-логика, контроллеры тонкие), `Contracts/`, `Data/`, `Controllers/`, `Requests/`, `Policies/`, `Support/` (инфраструктурные помощники: рендереры, генераторы, процессоры), `Adapters/` (внешние форматы, у Imports). `Domain/` (только CommercialProposals, Imports, Statistics) — чистый PHP без зависимостей от Laravel: `Domain/{Enums,ValueObjects,Services,Exceptions}`. `Jobs/`, `Console/` — без изменений.
 - Frontend (FSD): `resources/js/src/{app,pages,shared}`; DTO и форматтеры — `shared/api`; страницы — `pages/<name>/`.
+- Анимированные UI-компоненты (`shared/ui/`) — порты с designbookmark.com/motion: `file-drop`, `loading-button`, `password-strength`, `switch`, `confirm-dialog`, пружинный сайдбар; пружинный движок — `shared/lib/spring.svelte.ts` (stiffness/damping портированы из `tokens.css` источника, движение 1:1). HoldButton НЕ переносить — отклонён владельцем. Подтверждения действий — через `shared/ui/confirm-dialog` (поверх shadcn-примитивов `shared/ui/dialog`), не `window.confirm`; legacy-вызовы `confirm()` в `ProposalEditPage.svelte` постепенно переводятся на него.
 - Маршруты во фронте — через Wayfinder (`@/routes/...`). НИКОГДА не запускать `wayfinder:generate` без `--with-form` — это ломает типы `*.form()` во всём фронте.
 
 ## Ключевые инварианты
@@ -46,6 +47,7 @@ MSYS_NO_PATHCONV=1 docker run --rm -v "//c/Users/stas/Desktop/projects/cp-builde
 
 - Новые прямые зависимости — только с записью в `docs/dependencies.md` (CI-сверка).
 - Коммиты и пуш — только по явному запросу пользователя; `docs/` в gitignore (локальные рабочие материалы).
+- `.ai/` — локальные правила/настройки агентов (в gitignore, не коммитить); `vp check` игнорирует `.ai/**` (fmt.ignorePatterns в `vite.config.ts`).
 - Fixtures — только синтетика (`example.test`, вымышленные названия), никаких реальных данных.
 
 <laravel-boost-guidelines>
@@ -116,7 +118,7 @@ This project has domain-specific skills available in `**/skills/**`. You MUST ac
 
 ## Project Rules
 
-- This project contains committed, area-grouped rules in `.ai/rules` when that directory exists, including path-scoped framework guidelines under `.ai/rules/boost`. Before you enter plan mode or create/edit any file, you MUST first: open @.ai/rules/index.md (it maps file globs to rule files), read every rule file whose globs cover the path(s) in scope, and run `grep -rin 'keyword' .ai/rules` to catch what a path match alone misses. Do not write code until you have read and are following every matching rule. If `.ai/rules` does not exist, continue without it.
+- This project contains area-grouped rules in `.ai/rules` when that directory exists (local, gitignored), including path-scoped framework guidelines under `.ai/rules/boost`. Before you enter plan mode or create/edit any file, you MUST first: open @.ai/rules/index.md (it maps file globs to rule files), read every rule file whose globs cover the path(s) in scope, and run `grep -rin 'keyword' .ai/rules` to catch what a path match alone misses. Do not write code until you have read and are following every matching rule. If `.ai/rules` does not exist, continue without it.
 
 ## Artisan
 

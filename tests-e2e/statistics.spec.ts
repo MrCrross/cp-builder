@@ -32,10 +32,9 @@ test('public views aggregate into the statistics dashboard', async ({
 
     await page.locator('#title').fill(title);
 
-    const confirmPromise = page.waitForEvent('dialog');
-    const clickPromise = page.getByTestId('issue-proposal').click();
-    await (await confirmPromise).accept(); // «Выпустить КП? …»
-    await clickPromise;
+    // выпуск — через модальное подтверждение
+    await page.getByTestId('issue-proposal').click();
+    await page.getByTestId('confirm-dialog-confirm').click();
 
     const issuedPromise = page.waitForEvent('dialog');
     const issuedDialog = await issuedPromise;

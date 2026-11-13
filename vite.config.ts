@@ -110,6 +110,7 @@ export default defineConfig({
         htmlWhitespaceSensitivity: 'css',
         ignorePatterns: [
             '.agents/**',
+            '.ai/**',
             '.github/**',
             '.playwright-cli/**',
             'composer.json',

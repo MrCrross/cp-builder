@@ -3,6 +3,11 @@
 # из образа (анонимные тома маскируют bind mount).
 
 services:
+  db:
+    # Публикация порта для подключения IDE/клиентов с host-машины (dev-only).
+    ports:
+      - '127.0.0.1:5432:5432'
+
   web:
     build:
       target: runtime

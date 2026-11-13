@@ -18,10 +18,13 @@
     import Heading from '@/shared/ui/Heading.svelte';
     import InputError from '@/shared/ui/InputError.svelte';
     import PasswordInput from '@/shared/ui/PasswordInput.svelte';
+    import PasswordStrength from '@/shared/ui/password-strength/PasswordStrength.svelte';
     import { Button } from '@/shared/ui/button';
     import { Label } from '@/shared/ui/label';
 
     let { passwordRules }: { passwordRules: string } = $props();
+
+    let password = $state('');
 </script>
 
 <AppHead title="Безопасность" />
@@ -50,7 +53,7 @@
                     name="current_password"
                     class="mt-1 block w-full"
                     autocomplete="current-password"
-                    placeholder="Current password"
+                    placeholder="Текущий пароль"
                 />
                 <InputError message={errors.current_password} />
             </div>
@@ -62,9 +65,13 @@
                     name="password"
                     class="mt-1 block w-full"
                     autocomplete="new-password"
-                    placeholder="New password"
+                    placeholder="Новый пароль"
                     passwordrules={passwordRules}
+                    oninput={(event) => {
+                        password = event.currentTarget.value;
+                    }}
                 />
+                <PasswordStrength value={password} />
                 <InputError message={errors.password} />
             </div>
 
@@ -75,7 +82,7 @@
                     name="password_confirmation"
                     class="mt-1 block w-full"
                     autocomplete="new-password"
-                    placeholder="Confirm password"
+                    placeholder="Повторите пароль"
                     passwordrules={passwordRules}
                 />
                 <InputError message={errors.password_confirmation} />
@@ -87,7 +94,7 @@
                     disabled={processing}
                     data-test="update-password-button"
                 >
-                    Save
+                    Сохранить
                 </Button>
             </div>
         {/snippet}

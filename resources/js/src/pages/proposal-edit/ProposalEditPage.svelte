@@ -21,6 +21,7 @@
     import InputError from '@/shared/ui/InputError.svelte';
     import { Badge } from '@/shared/ui/badge';
     import { Button } from '@/shared/ui/button';
+    import ConfirmDialog from '@/shared/ui/confirm-dialog/ConfirmDialog.svelte';
     import { Input } from '@/shared/ui/input';
     import { Label } from '@/shared/ui/label';
     import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/shared/ui/dropdown-menu';
@@ -424,9 +425,10 @@
 
     const dirty = $derived(snapshot() !== baseline);
 
+    let issueDialogOpen = $state(false);
+
     function saveAndIssue() {
         if (!proposal) return;
-        if (!confirm('Выпустить КП? Создастся публичный документ и одноразовая ссылка.')) return;
 
         router.put(update.url(proposal), buildPayload(), {
             preserveScroll: true,
@@ -736,7 +738,7 @@
                         </Button>
                     {/if}
                     {#if canIssue}
-                        <Button type="button" variant="outline" disabled={processing} onclick={saveAndIssue} data-test="issue-proposal">
+                        <Button type="button" variant="outline" disabled={processing} onclick={() => (issueDialogOpen = true)} data-test="issue-proposal">
                             Сохранить и выпустить КП
                         </Button>
                     {/if}
@@ -750,6 +752,13 @@
                         </Button>
                     {/if}
                 </div>
+                <ConfirmDialog
+                    bind:open={issueDialogOpen}
+                    title="Выпустить КП?"
+                    description="Создастся публичный документ и одноразовая ссылка."
+                    confirmText="Сохранить и выпустить"
+                    onconfirm={saveAndIssue}
+                />
             {/snippet}
         </Form>
     {/if}
