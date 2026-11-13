@@ -40,13 +40,19 @@ final class SaveDraftAction
     ) {}
 
     /**
-     * @param  array{title: string, subtitle?: ?string, client_name?: ?string, client_contact?: ?string, manager_name?: ?string, manager_email?: ?string, manager_phone?: ?string, note?: ?string, project_id?: ?int, items?: list<ItemInput>, sections?: list<SectionInput>, lock_version: int}  $data
+     * @param  array{title: string, subtitle?: ?string, client_name?: ?string, client_contact?: ?string, manager_name?: ?string, manager_email?: ?string, manager_phone?: ?string, note?: ?string, project_id?: ?int, branch_id?: ?int, items?: list<ItemInput>, sections?: list<SectionInput>, lock_version: int}  $data
      */
     public function execute(Proposal $proposal, array $data): ProposalVersion
     {
         return DB::transaction(function () use ($proposal, $data) {
+            $branchId = $data['branch_id'] ?? $proposal->mainBranch?->id;
+
             /** @var ProposalVersion $version */
-            $version = $proposal->draftVersion()->lockForUpdate()->firstOrFail();
+            $version = $proposal->versions()
+                ->where('branch_id', $branchId)
+                ->where('state', VersionState::Draft)
+                ->lockForUpdate()
+                ->firstOrFail();
 
             if ($version->lock_version !== (int) $data['lock_version']) {
                 throw new ConflictHttpException('Черновик изменён другим пользователем. Обновите страницу.');

@@ -35,6 +35,7 @@ Route::middleware(['auth'])->group(function () {
     Route::post('proposals', [ProposalsController::class, 'store'])->name('proposals.store');
     Route::get('proposals/{proposal}', [ProposalsController::class, 'edit'])->name('proposals.edit');
     Route::get('proposals/{proposal}/preview', [ProposalsController::class, 'preview'])->name('proposals.preview');
+    Route::get('proposals/{proposal}/preview/logo/{kind}', [ProposalsController::class, 'previewLogo'])->name('proposals.preview.logo');
     Route::put('proposals/{proposal}/draft', [ProposalsController::class, 'update'])->name('proposals.update');
     Route::get('proposals/{proposal}/catalog-diff', [ProposalsController::class, 'catalogDiff'])->name('proposals.catalog-diff');
     Route::post('proposals/{proposal}/refresh-catalog', [ProposalsController::class, 'refreshCatalog'])->name('proposals.refresh-catalog');
@@ -42,6 +43,8 @@ Route::middleware(['auth'])->group(function () {
         ->middleware('throttle:proposals.publish')
         ->name('proposals.issue');
     Route::post('proposals/{proposal}/new-draft', [ProposalsController::class, 'newDraft'])->name('proposals.new-draft');
+    Route::post('proposals/{proposal}/branches', [ProposalsController::class, 'storeBranch'])->name('proposals.branches.store');
+    Route::post('proposals/{proposal}/branches/{branch}/promote', [ProposalsController::class, 'promoteBranch'])->name('proposals.branches.promote');
     Route::post('proposals/{proposal}/archive', [ProposalsController::class, 'archive'])->name('proposals.archive');
     Route::post('proposals/{proposal}/restore', [ProposalsController::class, 'restore'])->name('proposals.restore');
     Route::post('proposals/{proposal}/rotate-link', [ProposalsController::class, 'rotateLink'])

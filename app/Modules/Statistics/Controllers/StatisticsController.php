@@ -183,14 +183,14 @@ class StatisticsController extends Controller
 
         $proposals = Proposal::query()
             ->whereIn('id', $rows->pluck('proposal_id'))
-            ->with('issuedVersion:id,proposal_id,title')
+            ->with('mainBranch.currentVersion:id,title')
             ->get()
             ->keyBy('id');
 
         return $rows->map(fn ($row): array => [
             'id' => (int) $row->proposal_id,
             'number' => $proposals[$row->proposal_id]?->number,
-            'title' => $proposals[$row->proposal_id]?->issuedVersion?->title,
+            'title' => $proposals[$row->proposal_id]?->mainBranch?->currentVersion?->title,
             'visits' => (int) $row->visits,
             'unique_visitors' => (int) $row->unique_visitors,
             'bot_requests' => (int) $row->bot_requests,
@@ -214,13 +214,13 @@ class StatisticsController extends Controller
 
         return Proposal::query()
             ->whereIn('id', $ids)
-            ->with('issuedVersion:id,proposal_id,title')
+            ->with('mainBranch.currentVersion:id,title')
             ->orderByDesc('updated_at')
             ->get()
             ->map(fn (Proposal $proposal): array => [
                 'id' => $proposal->id,
                 'number' => $proposal->number,
-                'title' => $proposal->issuedVersion?->title,
+                'title' => $proposal->mainBranch?->currentVersion?->title,
             ])
             ->all();
     }

@@ -93,25 +93,57 @@ it('saves draft via http with server-side totals', function () {
         ->assertRedirect()
         ->assertSessionHasNoErrors();
 
-    expect($proposal->draftVersion->refresh()->total_max)->toBe('4000.00');
+    expect($proposal->draftOnBranch()->refresh()->total_max)->toBe('4000.00');
 });
 
-it('issues via http flashing one-time public url', function () {
+it('issues via http and exposes the permanent public url in the editor payload', function () {
     $manager = userWithRole('manager');
     $proposal = (new CreateDraftProposalAction)->execute($manager);
     (new SaveDraftAction)->execute($proposal, httpDraftPayload());
 
-    $response = $this->actingAs($manager)
-        ->post(route('proposals.issue', $proposal));
+    $this->actingAs($manager)
+        ->post(route('proposals.issue', $proposal))
+        ->assertRedirect()
+        ->assertSessionHasNoErrors();
 
-    $response->assertRedirect()->assertSessionHasNoErrors();
+    $token = $proposal->publicLinks()->sole()->token;
 
-    $issued = session('inertia.flash_data.issued');
+    expect($token)->not->toBeNull();
 
-    expect($issued)->not->toBeNull()
-        ->and($issued['url'])->toStartWith(url('/kp/'));
+    $url = route('kp.show', ['token' => $token]);
 
-    $this->get($issued['url'])->assertOk();
+    // Одноразового flash больше нет: URL постоянно доступен в пейлоаде редактора.
+    $this->actingAs($manager)
+        ->get(route('proposals.edit', $proposal))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->where('proposal.has_public_link', true)
+            ->where('proposal.public_url', $url)
+            ->where('proposal.branches.0.public_url', $url)
+        );
+
+    $this->get($url)->assertOk();
+});
+
+it('exposes null public url for legacy links created before token storage', function () {
+    $manager = userWithRole('manager');
+    $proposal = (new CreateDraftProposalAction)->execute($manager);
+    (new SaveDraftAction)->execute($proposal, httpDraftPayload());
+
+    $this->actingAs($manager)->post(route('proposals.issue', $proposal));
+
+    // Имитация строки, созданной до перехода на хранение токена.
+    $proposal->publicLinks()->whereNull('revoked_at')->update(['token' => null]);
+
+    $this->actingAs($manager)
+        ->get(route('proposals.edit', $proposal))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->where('proposal.has_public_link', true)
+            ->where('proposal.public_url', null)
+            ->where('proposal.branches.0.has_public_link', true)
+            ->where('proposal.branches.0.public_url', null)
+        );
 });
 
 it('rate limits issue endpoint to 10 per minute', function () {

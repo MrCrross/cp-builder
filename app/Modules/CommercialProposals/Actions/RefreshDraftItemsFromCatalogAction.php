@@ -28,11 +28,15 @@ final class RefreshDraftItemsFromCatalogAction
     /**
      * @return array{updated: int}
      */
-    public function execute(User $actor, Proposal $proposal): array
+    public function execute(User $actor, Proposal $proposal, ?int $branchId = null): array
     {
-        return DB::transaction(function () use ($actor, $proposal) {
+        return DB::transaction(function () use ($actor, $proposal, $branchId) {
             /** @var ProposalVersion $version */
-            $version = $proposal->draftVersion()->lockForUpdate()->firstOrFail();
+            $version = $proposal->versions()
+                ->where('branch_id', $branchId ?? $proposal->mainBranch?->id)
+                ->where('state', VersionState::Draft)
+                ->lockForUpdate()
+                ->firstOrFail();
 
             if ($version->state !== VersionState::Draft) {
                 throw new ConflictHttpException('Обновлять можно только черновик.');

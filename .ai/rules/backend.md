@@ -17,10 +17,11 @@
 - Публичные ссылки: полный токен в `public_links.token` + `token_hash` (sha256) для lookup по `/kp/{token}`. Одноразовых показов нет. `RotatePublicLinkAction` крутит только main-ссылку (`branch_id is null`); ссылки веток не трогает.
 - Публичный рендер — только через `PublicProposalController` + Blade `resources/views/proposals/document.blade.php`; пользовательский контент — только через санитайзер; `Cache-Control: no-store`.
 
-## Миграции — лендмайн SQLite
+## Миграции — лендмайны SQLite
 
 - На SQLite `change()`/`dropColumn` пересоздают таблицу через grammar Laravel, КОТОРАЯ ТЕРЯЕТ WHERE у partial unique index. Все raw partial-индексы (`proposal_versions_one_draft/one_issued`, `proposal_branches_one_main`, `public_links_one_active_main/_branch`) создавать `DB::statement` ПОСЛЕ любых `Schema::table`-изменений этих таблиц (см. порядок в `2026_11_14_000000_create_proposal_branches`). Добавление колонки (`add`) rebuild не вызывает — безопасно.
-- Тесты — sqlite :memory:, dev/compose — PostgreSQL 17. Поведение partial unique на sqlite проверять тестом, на pgsql — вручную через compose.
+- `ALTER TABLE ADD/DROP CONSTRAINT` — pgsql всегда; sqlite только ≥ 3.53 (локальный образ тестов собран на нём, CI ubuntu — на более старом). В миграциях такие statement'ы оборачивать в `try/catch (QueryException)` — enforcement на pgsql сохраняется, старый sqlite пропускает (см. любую `*create_*_table`-миграцию).
+- Тесты — sqlite :memory:, dev/compose — PostgreSQL 17. Поведение partial unique и CHECK на sqlite проверять тестом, на pgsql — вручную через compose.
 
 ## Прочее
 

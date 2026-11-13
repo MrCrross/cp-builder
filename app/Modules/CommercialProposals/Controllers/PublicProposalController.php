@@ -5,6 +5,8 @@ namespace App\Modules\CommercialProposals\Controllers;
 use App\Http\Controllers\Controller;
 use App\Modules\CommercialProposals\Domain\Enums\ProposalStatus;
 use App\Modules\CommercialProposals\Models\Proposal;
+use App\Modules\CommercialProposals\Models\ProposalBranch;
+use App\Modules\CommercialProposals\Models\ProposalVersion;
 use App\Modules\CommercialProposals\Models\PublicLink;
 use App\Modules\CommercialProposals\Models\PublicLinkAlias;
 use App\Modules\Statistics\Actions\RecordProposalVisitAction;
@@ -14,9 +16,12 @@ use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
 /**
- * Публичный документ /kp/{token} (план §9.3): только последний issued и не
- * archived; draft публично недоступен. Lookup по SHA-256 hash токена;
- * legacy slugs обслуживаются как aliases без раскрытия canonical token.
+ * Публичный документ /kp/{token} (план §9.3 + git-модель веток): ссылка
+ * ветки (public_links.branch_id) показывает текущую версию этой ветки;
+ * main-ссылка (branch_id is null) — текущую версию main-ветки предложения.
+ * Lookup по SHA-256 hash токена; legacy slugs обслуживаются как aliases
+ * без раскрытия canonical token. Draft публично недоступен (проверка
+ * статуса предложения).
  */
 class PublicProposalController extends Controller
 {
@@ -26,14 +31,7 @@ class PublicProposalController extends Controller
 
     public function show(Request $request, string $token): Response
     {
-        [$proposal, $link] = $this->resolve($token);
-
-        $version = $proposal->issuedVersion()->with(['items', 'sections'])->first();
-
-        if ($version === null) {
-            // Выпущенная версия отсутствует (draft или inconsistent state).
-            throw new NotFoundHttpException;
-        }
+        [$proposal, $branch, $version] = $this->resolve($token);
 
         $this->trackVisit($request, $proposal);
 
@@ -52,10 +50,9 @@ class PublicProposalController extends Controller
     {
         abort_unless(in_array($kind, ['large_logo', 'small_logo'], true), 404);
 
-        [$proposal] = $this->resolve($token);
+        [, , $version] = $this->resolve($token);
 
-        $version = $proposal->issuedVersion()->first();
-        $logo = $version?->branding_snapshot[$kind] ?? null;
+        $logo = $version->branding_snapshot[$kind] ?? null;
 
         if (! is_array($logo) || ! isset($logo['disk'], $logo['path'])) {
             throw new NotFoundHttpException;
@@ -74,7 +71,7 @@ class PublicProposalController extends Controller
     }
 
     /**
-     * @return array{0: Proposal, 1: PublicLink}
+     * @return array{0: Proposal, 1: ProposalBranch, 2: ProposalVersion}
      */
     private function resolve(string $token): array
     {
@@ -95,7 +92,17 @@ class PublicProposalController extends Controller
             throw new NotFoundHttpException;
         }
 
-        return [$proposal, $link];
+        $branch = $link->branch_id !== null
+            ? $link->branch()->firstOrFail()
+            : $proposal->branches()->where('is_main', true)->firstOrFail();
+
+        $version = $branch->currentVersion()->with(['items', 'sections'])->first();
+
+        if ($version === null) {
+            throw new NotFoundHttpException;
+        }
+
+        return [$proposal, $branch, $version];
     }
 
     /**
@@ -116,20 +123,16 @@ class PublicProposalController extends Controller
             throw new NotFoundHttpException;
         }
 
-        $activeLink = $proposal->publicLinks()->whereNull('revoked_at')->first();
+        $branch = $proposal->branches()->where('is_main', true)->firstOrFail();
 
-        if ($activeLink === null) {
-            throw new NotFoundHttpException;
-        }
-
-        return $this->renderForAlias($proposal, $activeLink);
+        return $this->renderForAlias($proposal, $branch);
     }
 
     private function renderForAlias(
         Proposal $proposal,
-        PublicLink $link,
+        ProposalBranch $branch,
     ): Response {
-        $version = $proposal->issuedVersion()->with(['items', 'sections'])->firstOrFail();
+        $version = $branch->currentVersion()->with(['items', 'sections'])->firstOrFail();
 
         $this->trackVisit(request(), $proposal);
 

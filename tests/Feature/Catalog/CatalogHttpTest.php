@@ -180,7 +180,7 @@ it('updates item price without touching saved proposal snapshots', function () {
 
     (new UpdateCatalogItemAction)->execute($manager, $item, ['name' => 'Работа (новая)', 'unit' => 'ч', 'price' => '200.00']);
 
-    $snapshotItem = $proposal->draftVersion->items()->sole();
+    $snapshotItem = $proposal->draftOnBranch()->items()->sole();
     expect($snapshotItem->name)->toBe('Работа')
         ->and($snapshotItem->unit_price)->toBe('100.00');
 });

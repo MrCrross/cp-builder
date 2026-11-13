@@ -32,6 +32,7 @@ class SaveProposalDraftRequest extends FormRequest
             'manager_phone' => ['nullable', 'string', 'max:255'],
             'note' => ['nullable', 'string', 'max:10000'],
             'project_id' => ['nullable', 'integer', 'exists:projects,id'],
+            'branch_id' => ['nullable', 'integer', 'exists:proposal_branches,id'],
             'items' => ['array', 'max:500'],
             'items.*.name' => ['required', 'string', 'max:500'],
             'items.*.description' => ['nullable', 'string', 'max:2000'],

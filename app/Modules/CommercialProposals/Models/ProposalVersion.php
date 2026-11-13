@@ -16,6 +16,7 @@ use Illuminate\Support\Carbon;
  *
  * @property int $id
  * @property int $proposal_id
+ * @property int $branch_id
  * @property int $version
  * @property VersionState $state
  * @property string $title
@@ -66,6 +67,14 @@ class ProposalVersion extends Model
     public function proposal(): BelongsTo
     {
         return $this->belongsTo(Proposal::class);
+    }
+
+    /**
+     * @return BelongsTo<ProposalBranch, $this>
+     */
+    public function branch(): BelongsTo
+    {
+        return $this->belongsTo(ProposalBranch::class, 'branch_id');
     }
 
     /**

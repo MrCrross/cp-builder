@@ -74,7 +74,7 @@ class ProjectsController extends Controller
                 'id' => $proposal->id,
                 'number' => $proposal->number,
                 'status' => $proposal->status->value,
-                'has_draft' => $proposal->draftVersion()->exists(),
+                'has_draft' => $proposal->versions()->where('state', 'draft')->exists(),
                 'updated_at' => $proposal->updated_at->toIso8601String(),
             ])->values(),
         ]);

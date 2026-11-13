@@ -20,6 +20,4 @@ export type Auth = {
 export type Flash = {
     status?: string | null;
     toast?: import('./ui').FlashToast | null;
-    /** Показывается один раз: URL и token новой публичной ссылки. */
-    issued?: import('./proposals').IssuedFlash | null;
 };

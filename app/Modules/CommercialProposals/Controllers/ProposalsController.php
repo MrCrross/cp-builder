@@ -9,22 +9,28 @@ use App\Modules\CommercialProposals\Actions\CreateDraftProposalAction;
 use App\Modules\CommercialProposals\Actions\CreateNewDraftFromIssuedAction;
 use App\Modules\CommercialProposals\Actions\DeleteDraftProposalAction;
 use App\Modules\CommercialProposals\Actions\DraftCatalogDiffAction;
+use App\Modules\CommercialProposals\Actions\ForkBranchAction;
 use App\Modules\CommercialProposals\Actions\IssueProposalAction;
+use App\Modules\CommercialProposals\Actions\PromoteBranchAction;
 use App\Modules\CommercialProposals\Actions\RefreshDraftItemsFromCatalogAction;
 use App\Modules\CommercialProposals\Actions\RestoreProposalAction;
 use App\Modules\CommercialProposals\Actions\RotatePublicLinkAction;
 use App\Modules\CommercialProposals\Actions\SaveDraftAction;
 use App\Modules\CommercialProposals\Models\Proposal;
+use App\Modules\CommercialProposals\Models\ProposalBranch;
 use App\Modules\CommercialProposals\Models\ProposalTemplate;
+use App\Modules\CommercialProposals\Models\ProposalVersion;
 use App\Modules\CommercialProposals\Requests\SaveProposalDraftRequest;
 use App\Modules\Projects\Models\Project;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
 use Inertia\Response;
 use Symfony\Component\HttpFoundation\Response as BaseResponse;
+use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
 /**
  * Внутренний контроллер КП: реестр, редактор, жизненный цикл, preview.
@@ -39,8 +45,9 @@ class ProposalsController extends Controller
         $status = $request->query('status');
 
         $query = Proposal::query()
-            ->with(['draftVersion:id,proposal_id,title,total_min,total_max', 'issuedVersion:id,proposal_id,title,total_min,total_max,issued_at'])
-            ->withCount('versions');
+            ->with('mainBranch.currentVersion:id,title,total_min,total_max,issued_at')
+            ->withCount('versions')
+            ->withExists(['versions as has_draft' => fn ($q) => $q->where('state', 'draft')]);
 
         if (is_string($status) && $status !== '') {
             $query->where('status', $status);
@@ -51,18 +58,16 @@ class ProposalsController extends Controller
             ->paginate(20)
             ->withQueryString()
             ->through(function (Proposal $proposal): array {
-                $draft = $proposal->draftVersion;
-                $issued = $proposal->issuedVersion;
-                $version = $draft ?? $issued;
+                $current = $proposal->mainBranch?->currentVersion;
 
                 return [
                     'id' => $proposal->id,
                     'number' => $proposal->number,
                     'status' => $proposal->status->value,
-                    'title' => $version?->title,
-                    'total_min' => $version?->total_min,
-                    'total_max' => $version?->total_max,
-                    'has_draft' => $draft !== null,
+                    'title' => $current?->title,
+                    'total_min' => $current?->total_min,
+                    'total_max' => $current?->total_max,
+                    'has_draft' => (bool) $proposal->has_draft,
                     'versions_count' => $proposal->versions_count,
                     'updated_at' => $proposal->updated_at->toIso8601String(),
                 ];
@@ -101,12 +106,12 @@ class ProposalsController extends Controller
         return redirect()->route('proposals.edit', $proposal);
     }
 
-    public function edit(Proposal $proposal): Response
+    public function edit(Request $request, Proposal $proposal): Response
     {
         Gate::authorize('view', $proposal);
 
         return Inertia::render('proposal-edit/ProposalEditPage', [
-            'proposal' => $this->proposalPayload($proposal),
+            'proposal' => $this->proposalPayload($proposal, $this->resolveBranchFromQuery($proposal, $request)),
             'templates' => $this->templates(),
             'projects' => $this->projects(),
         ]);
@@ -128,16 +133,7 @@ class ProposalsController extends Controller
     {
         Gate::authorize('issue', $proposal);
 
-        /** @var User $user */
-        $user = $request->user();
-        ['token' => $token] = $action->execute($user, $proposal);
-
-        if ($token !== null) {
-            Inertia::flash('issued', [
-                'url' => route('kp.show', ['token' => $token]),
-                'token' => $token,
-            ]);
-        }
+        $action->execute($request->user(), $proposal, $this->branchIdFromRequest($request, $proposal));
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('КП выпущено.')]);
 
@@ -148,9 +144,51 @@ class ProposalsController extends Controller
     {
         Gate::authorize('update', $proposal);
 
-        $action->execute($request->user(), $proposal);
+        $action->execute($request->user(), $proposal, $this->branchIdFromRequest($request, $proposal));
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Создан новый черновик версии.')]);
+
+        return back();
+    }
+
+    /**
+     * Форк версии в новую ветку со своей публичной ссылкой (git-модель).
+     */
+    public function storeBranch(Request $request, Proposal $proposal, ForkBranchAction $action): RedirectResponse
+    {
+        Gate::authorize('update', $proposal);
+
+        /** @var array{name: string, version_id: int} $validated */
+        $validated = $request->validate([
+            'name' => ['required', 'string', 'max:120'],
+            'version_id' => ['required', 'integer'],
+        ]);
+
+        $action->execute(
+            $request->user(),
+            $proposal,
+            $validated['name'],
+            $validated['version_id'],
+        );
+
+        Inertia::flash('toast', ['type' => 'success', 'message' => __('Ветка создана.')]);
+
+        return back();
+    }
+
+    /**
+     * Назначение ветки основной: постоянная main-ссылка начинает показывать
+     * текущую версию этой ветки.
+     */
+    public function promoteBranch(Request $request, Proposal $proposal, ProposalBranch $branch, PromoteBranchAction $action): RedirectResponse
+    {
+        Gate::authorize('update', $proposal);
+
+        abort_unless($branch->proposal_id === $proposal->id, 404);
+
+        $action->execute($request->user(), $branch);
+
+        Inertia::flash('toast', ['type' => 'success', 'message' => __('Ветка назначена основной. Main-ссылка теперь показывает её текущую версию.')]);
 
         return back();
     }
@@ -181,12 +219,8 @@ class ProposalsController extends Controller
     {
         Gate::authorize('rotateLink', $proposal);
 
-        ['token' => $token] = $action->execute($request->user(), $proposal);
+        $action->execute($request->user(), $proposal);
 
-        Inertia::flash('issued', [
-            'url' => route('kp.show', ['token' => $token]),
-            'token' => $token,
-        ]);
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Ссылка заменена. Старая ссылка отозвана.')]);
 
         return back();
@@ -204,33 +238,86 @@ class ProposalsController extends Controller
     }
 
     /**
-     * Preview черновика: session + Policy, публичный alias не создаётся
-     * (план §9.3). Рендер — тем же Blade, логотипы из snapshot'а черновика.
+     * Preview черновика ветки (?branch=, по умолчанию main): session +
+     * Policy, публичный alias не создаётся (план §9.3). Рендер — тем же
+     * Blade; логотипы — через внутренний авторизованный маршрут (иначе
+     * превью без токена не показало бы логотип из снапшота).
      */
-    public function preview(Proposal $proposal): BaseResponse
+    public function preview(Request $request, Proposal $proposal): BaseResponse
     {
         Gate::authorize('view', $proposal);
 
-        $version = $proposal->draftVersion()->with(['items', 'sections'])->first()
-            ?? $proposal->issuedVersion()->with(['items', 'sections'])->firstOrFail();
+        $branch = $this->resolveBranchFromQuery($proposal, $request);
+
+        $version = $this->previewVersion($proposal, $branch);
 
         return response()->view('proposals.document', [
             'proposal' => $proposal,
             'version' => $version,
             'publicToken' => null,
             'internalPreview' => true,
+            'previewBranch' => $branch?->name,
         ])->header('Cache-Control', 'no-store');
+    }
+
+    /**
+     * Черновик ветки, а при его отсутствии — текущая версия (preview
+     * показывает то, что увидит клиент после выпуска).
+     */
+    private function previewVersion(Proposal $proposal, ?ProposalBranch $branch): ProposalVersion
+    {
+        $version = $branch?->versions()->where('state', 'draft')->with(['items', 'sections'])->first()
+            ?? $branch?->currentVersion()->with(['items', 'sections'])->first();
+
+        if ($version === null) {
+            throw new NotFoundHttpException;
+        }
+
+        return $version;
+    }
+
+    /**
+     * Логотип для внутреннего preview: тот же файл из снапшота версии,
+     * но через авторизованный маршрут — без раскрытия публичного токена.
+     */
+    public function previewLogo(Request $request, Proposal $proposal, string $kind): BaseResponse
+    {
+        Gate::authorize('view', $proposal);
+
+        abort_unless(in_array($kind, ['large_logo', 'small_logo'], true), 404);
+
+        $branch = $this->resolveBranchFromQuery($proposal, $request);
+
+        $version = $branch?->versions()->where('state', 'draft')->first()
+            ?? $branch?->currentVersion()->first();
+
+        $logo = $version?->branding_snapshot[$kind] ?? null;
+
+        if (! is_array($logo) || ! isset($logo['disk'], $logo['path'])) {
+            throw new NotFoundHttpException;
+        }
+
+        $disk = Storage::disk((string) $logo['disk']);
+
+        if (! $disk->exists((string) $logo['path'])) {
+            throw new NotFoundHttpException;
+        }
+
+        return $disk->response((string) $logo['path'], null, [
+            'Content-Type' => $logo['mime'] ?? 'application/octet-stream',
+            'Cache-Control' => 'private, max-age=300',
+        ]);
     }
 
     /**
      * Diff snapshot-строк черновика против справочника (план §7.3):
      * только чтение, используется диалогом «Обновить из справочника».
      */
-    public function catalogDiff(Proposal $proposal, DraftCatalogDiffAction $action): JsonResponse
+    public function catalogDiff(Request $request, Proposal $proposal, DraftCatalogDiffAction $action): JsonResponse
     {
         Gate::authorize('view', $proposal);
 
-        return response()->json(['diff' => $action->execute($proposal)]);
+        return response()->json(['diff' => $action->execute($proposal, $this->branchIdFromRequest($request, $proposal))]);
     }
 
     /**
@@ -241,7 +328,7 @@ class ProposalsController extends Controller
     {
         Gate::authorize('update', $proposal);
 
-        ['updated' => $updated] = $action->execute($request->user(), $proposal);
+        ['updated' => $updated] = $action->execute($request->user(), $proposal, $this->branchIdFromRequest($request, $proposal));
 
         Inertia::flash('toast', [
             'type' => 'success',
@@ -278,14 +365,25 @@ class ProposalsController extends Controller
     }
 
     /**
+     * Пейлоад редактора: черновик активной ветки (?branch=, по умолчанию
+     * main) плюс сводка всех веток для панели версий.
+     *
      * @return array<string, mixed>
      */
-    private function proposalPayload(Proposal $proposal): array
+    private function proposalPayload(Proposal $proposal, ?ProposalBranch $activeBranch = null): array
     {
-        $proposal->load(['draftVersion.items', 'draftVersion.sections', 'issuedVersion']);
+        $proposal->load(['branches.currentVersion', 'branches.publicLink', 'versions' => fn ($q) => $q->where('state', 'draft')]);
 
-        $draft = $proposal->draftVersion;
-        $issued = $proposal->issuedVersion;
+        $mainBranch = $proposal->branches->firstWhere('is_main', true);
+        $mainLink = $proposal->publicLinks()->whereNull('branch_id')->whereNull('revoked_at')->first();
+
+        // Активная ветка: переданная (?branch=), иначе main; у нового КП
+        // всегда есть main-ветка (создаётся вместе с первой версией).
+        $activeBranch ??= $mainBranch;
+        $draft = $activeBranch !== null
+            ? $proposal->versions->firstWhere('branch_id', $activeBranch->id)
+            : null;
+        $current = $activeBranch?->currentVersion;
 
         return [
             'id' => $proposal->id,
@@ -293,11 +391,48 @@ class ProposalsController extends Controller
             'status' => $proposal->status->value,
             'template_id' => $proposal->template_id,
             'project_id' => $proposal->project_id,
-            // Публичный URL показывается один раз при выпуске/rotation (flash):
-            // в БД только hash, восстановить его нельзя (план §9.3).
-            'has_public_link' => $proposal->publicLinks()->whereNull('revoked_at')->exists(),
-            'preview_url' => route('proposals.preview', $proposal),
+            // Публичная ссылка постоянна, полный токен хранится в БД —
+            // URL доступен в интерфейсе всегда (без одноразовых показов).
+            'has_public_link' => $mainLink !== null,
+            'public_url' => $mainLink?->token !== null ? route('kp.show', ['token' => $mainLink->token]) : null,
+            'preview_url' => $activeBranch !== null
+                ? route('proposals.preview', ['proposal' => $proposal, 'branch' => $activeBranch->name])
+                : null,
+            'active_branch' => $activeBranch?->name,
+            'branches' => $proposal->branches->map(fn (ProposalBranch $branch): array => [
+                'id' => $branch->id,
+                'name' => $branch->name,
+                'is_main' => $branch->is_main,
+                'has_public_link' => $branch->is_main
+                    ? $mainLink !== null
+                    : $branch->publicLink !== null,
+                'public_url' => $branch->is_main
+                    ? ($mainLink?->token !== null ? route('kp.show', ['token' => $mainLink->token]) : null)
+                    : ($branch->publicLink?->token !== null ? route('kp.show', ['token' => $branch->publicLink->token]) : null),
+                'current_version' => $branch->currentVersion ? [
+                    'id' => $branch->currentVersion->id,
+                    'version' => $branch->currentVersion->version,
+                    'state' => $branch->currentVersion->state->value,
+                    'title' => $branch->currentVersion->title,
+                    'issued_at' => $branch->currentVersion->issued_at?->toIso8601String(),
+                    'total_min' => $branch->currentVersion->total_min,
+                    'total_max' => $branch->currentVersion->total_max,
+                ] : null,
+                'draft_version' => $proposal->versions->firstWhere('branch_id', $branch->id) !== null
+                    ? ['id' => $proposal->versions->firstWhere('branch_id', $branch->id)->id]
+                    : null,
+            ])->values(),
+            'versions' => $proposal->versions()->with('branch:id,name')->get()
+                ->map(fn (ProposalVersion $version): array => [
+                    'id' => $version->id,
+                    'version' => $version->version,
+                    'state' => $version->state->value,
+                    'branch_name' => $version->branch->name,
+                ])->values(),
             'draft' => $draft ? [
+                'id' => $draft->id,
+                'branch_id' => $draft->branch_id,
+                'branch_name' => $activeBranch->name,
                 'lock_version' => $draft->lock_version,
                 'title' => $draft->title,
                 'subtitle' => $draft->subtitle,
@@ -324,13 +459,47 @@ class ProposalsController extends Controller
                     'payload' => $section->payload,
                 ])->values(),
             ] : null,
-            'issued' => $issued ? [
-                'version' => $issued->version,
-                'title' => $issued->title,
-                'issued_at' => $issued->issued_at?->toIso8601String(),
-                'total_min' => $issued->total_min,
-                'total_max' => $issued->total_max,
+            'current_version' => $current ? [
+                'id' => $current->id,
+                'version' => $current->version,
+                'title' => $current->title,
+                'issued_at' => $current->issued_at?->toIso8601String(),
+                'total_min' => $current->total_min,
+                'total_max' => $current->total_max,
             ] : null,
         ];
+    }
+
+    /**
+     * Ветка из query-параметра ?branch= (по имени), иначе main.
+     */
+    private function resolveBranchFromQuery(Proposal $proposal, Request $request): ?ProposalBranch
+    {
+        $name = $request->query('branch');
+
+        if (is_string($name) && $name !== '') {
+            return $proposal->branches()->where('name', $name)->firstOrFail();
+        }
+
+        return $proposal->branches()->where('is_main', true)->first();
+    }
+
+    /**
+     * branch_id из тела/строки запроса с валидацией принадлежности ветки
+     * предложению; по умолчанию — main-ветка.
+     */
+    private function branchIdFromRequest(Request $request, Proposal $proposal): ?int
+    {
+        $raw = $request->input('branch_id');
+
+        if (! is_numeric($raw)) {
+            return $proposal->mainBranch?->id;
+        }
+
+        $branchId = (int) $raw;
+
+        abort_unless($proposal->branches()->whereKey($branchId)->exists(), 404);
+
+        return $branchId;
     }
 }

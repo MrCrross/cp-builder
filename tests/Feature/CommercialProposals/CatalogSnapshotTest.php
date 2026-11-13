@@ -58,14 +58,14 @@ it('preserves catalog lineage through save round-trip and rejects unknown ids', 
         'items' => [linkedItem($item)],
     ]));
 
-    expect($proposal->draftVersion->items()->sole()->catalog_item_id)->toBe($item->id);
+    expect($proposal->draftOnBranch()->items()->sole()->catalog_item_id)->toBe($item->id);
 
     // Повторное сохранение: lineage не теряется (рандеву catalog_item_id).
     (new SaveDraftAction)->execute($proposal, snapshotDraftPayload([
         'items' => [linkedItem($item)],
         'lock_version' => 2,
     ]));
-    expect($proposal->draftVersion->items()->sole()->catalog_item_id)->toBe($item->id);
+    expect($proposal->draftOnBranch()->items()->sole()->catalog_item_id)->toBe($item->id);
 
     // Несуществующая позиция справочника — 422 на HTTP-уровне.
     $this->actingAs($manager)
@@ -127,7 +127,7 @@ it('refreshes linked draft rows from catalog recomputing totals and bumping lock
     ['updated' => $updated] = app(RefreshDraftItemsFromCatalogAction::class)->execute($manager, $proposal);
     expect($updated)->toBe(1);
 
-    $version = $proposal->draftVersion->refresh();
+    $version = $proposal->draftOnBranch()->refresh();
     $linked = $version->items()->whereNotNull('catalog_item_id')->sole();
     $free = $version->items()->whereNull('catalog_item_id')->sole();
 
@@ -158,5 +158,5 @@ it('keeps issued versions immutable: refresh requires a draft', function () {
         ->post(route('proposals.refresh-catalog', $proposal))
         ->assertNotFound();
 
-    expect($proposal->issuedVersion->items()->sole()->unit_price)->toBe('100.00');
+    expect($proposal->mainVersion()->items()->sole()->unit_price)->toBe('100.00');
 });

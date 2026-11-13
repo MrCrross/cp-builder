@@ -13,6 +13,7 @@
     import Heading from '@/shared/ui/Heading.svelte';
     import { Badge } from '@/shared/ui/badge';
     import { Button } from '@/shared/ui/button';
+    import { Pagination } from '@/shared/ui/pagination';
     import FileDrop from '@/shared/ui/file-drop/FileDrop.svelte';
     import LoadingButton from '@/shared/ui/loading-button/LoadingButton.svelte';
     import { Label } from '@/shared/ui/label';
@@ -80,12 +81,6 @@
                 files = [];
             },
         });
-    }
-
-    function decodeHtml(text: string): string {
-        const textarea = document.createElement('textarea');
-        textarea.innerHTML = text;
-        return textarea.value;
     }
 </script>
 
@@ -177,12 +172,6 @@
     </div>
 
     {#if jobs.links.length > 3}
-        <div class="flex flex-wrap gap-1">
-            {#each jobs.links as link (link.label)}
-                {#if link.url}
-                    <Button size="sm" variant={link.active ? 'default' : 'outline'} href={link.url}>{decodeHtml(link.label)}</Button>
-                {/if}
-            {/each}
-        </div>
+        <Pagination links={jobs.links} />
     {/if}
 </div>

@@ -7,10 +7,11 @@
 </script>
 
 <script lang="ts">
-    import { Form, page, router } from '@inertiajs/svelte';
+    import { Form, page } from '@inertiajs/svelte';
     import AppHead from '@/shared/ui/AppHead.svelte';
     import InputError from '@/shared/ui/InputError.svelte';
     import { Button } from '@/shared/ui/button';
+    import { Pagination } from '@/shared/ui/pagination';
     import {
         Dialog,
         DialogContent,
@@ -281,25 +282,7 @@
     </div>
 
     {#if users.last_page > 1}
-        <div
-            class="flex items-center justify-between text-sm text-muted-foreground"
-        >
-            <span>
-                {users.from}–{users.to} из {users.total}
-            </span>
-            <div class="flex gap-2">
-                {#each users.links as link (link.label)}
-                    <Button
-                        variant={link.active ? 'default' : 'outline'}
-                        size="sm"
-                        disabled={link.url === null}
-                        onclick={() => link.url && router.get(link.url)}
-                    >
-                        {@html link.label}
-                    </Button>
-                {/each}
-            </div>
-        </div>
+        <Pagination links={users.links} from={users.from} to={users.to} total={users.total} />
     {/if}
 </div>
 

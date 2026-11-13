@@ -6,6 +6,7 @@ use App\Models\User;
 use App\Modules\CommercialProposals\Domain\Enums\ProposalStatus;
 use App\Modules\CommercialProposals\Domain\Enums\VersionState;
 use App\Modules\CommercialProposals\Models\Proposal;
+use App\Modules\CommercialProposals\Models\ProposalBranch;
 use App\Modules\CommercialProposals\Models\ProposalVersion;
 use App\Modules\CommercialProposals\Support\DocumentNumberGenerator;
 use App\Support\Audit\Audit;
@@ -15,23 +16,26 @@ use Symfony\Component\HttpKernel\Exception\ConflictHttpException;
 use Throwable;
 
 /**
- * Выпуск версии (план §6.3, §7.1): атомарно — номер из document_counters,
- * фиксированный branding snapshot (файлы логотипов копируются в каталог
- * версии, §7.3), прежний issued → superseded, draft → issued, Proposal →
- * issued, при первом выпуске создаётся public link. Повторный выпуск того же
+ * Выпуск версии на ветке (план §6.3, §7.1 + git-модель веток): атомарно —
+ * номер из document_counters, фиксированный branding snapshot (файлы
+ * логотипов копируются в каталог версии, §7.3), прежняя текущая версия
+ * ветки → superseded, draft → issued, указатель ветки двигается на новую
+ * версию, Proposal → issued. При первом выпуске на main-ветке создаётся
+ * main-ссылка (public_links.branch_id is null). Повторный выпуск того же
  * payload без изменений запрещён (409).
  *
- * Возвращает полный public token — только при первом выпуске, дальше null
- * (ссылка постоянная, §7.1 п.5).
+ * Возвращает полный public token — только при создании ссылки (первый
+ * выпуск main), дальше null (ссылка постоянная, §7.1 п.5). Токен также
+ * хранится в БД (public_links.token) и доступен в интерфейсе всегда.
  */
 final class IssueProposalAction
 {
     /**
      * @return array{token: string|null}
      */
-    public function execute(User $actor, Proposal $proposal): array
+    public function execute(User $actor, Proposal $proposal, ?int $branchId = null): array
     {
-        return DB::transaction(function () use ($actor, $proposal) {
+        return DB::transaction(function () use ($actor, $proposal, $branchId) {
             /** @var Proposal $locked */
             $locked = Proposal::query()->whereKey($proposal->id)->lockForUpdate()->firstOrFail();
 
@@ -39,14 +43,21 @@ final class IssueProposalAction
                 throw new ConflictHttpException('Архивное КП нельзя выпускать. Восстановите документ.');
             }
 
-            $draft = $locked->draftVersion()->lockForUpdate()->firstOrFail();
-            $currentIssued = $locked->issuedVersion()->first();
+            /** @var ProposalBranch $branch */
+            $branch = $locked->branches()->whereKey($branchId ?? $locked->mainBranch?->id)->lockForUpdate()->firstOrFail();
+
+            /** @var ProposalVersion $draft */
+            $draft = $branch->versions()->where('state', VersionState::Draft)->lockForUpdate()->firstOrFail();
+
+            /** @var ProposalVersion|null $previousCurrent */
+            $previousCurrent = $branch->currentVersion()->lockForUpdate()->first();
 
             // Повторный выпуск того же payload без изменений запрещён (§6.3):
             // сравниваем content-hash, а не timestamps (секундная точность
             // неразличима).
-            if ($currentIssued !== null
-                && hash_equals($this->contentHash($currentIssued), $this->contentHash($draft))
+            if ($previousCurrent !== null
+                && $previousCurrent->state === VersionState::Issued
+                && hash_equals($this->contentHash($previousCurrent), $this->contentHash($draft))
             ) {
                 throw new ConflictHttpException('Нет изменений с момента последнего выпуска.');
             }
@@ -61,9 +72,9 @@ final class IssueProposalAction
             try {
                 $snapshot = $this->snapshotWithCopiedLogos($locked->id, $draft->version, $draft->branding_snapshot ?? [], $copiedPaths);
 
-                if ($currentIssued !== null) {
-                    $currentIssued->fill(['state' => VersionState::Superseded]);
-                    $currentIssued->save();
+                if ($previousCurrent !== null && $previousCurrent->state === VersionState::Issued) {
+                    $previousCurrent->fill(['state' => VersionState::Superseded]);
+                    $previousCurrent->save();
                 }
 
                 $draft->fill([
@@ -74,6 +85,8 @@ final class IssueProposalAction
                 ]);
                 $draft->save();
 
+                $branch->fill(['current_version_id' => $draft->id])->save();
+
                 $locked->fill([
                     'status' => ProposalStatus::Issued,
                     'number' => $number,
@@ -83,19 +96,25 @@ final class IssueProposalAction
                 $locked->save();
 
                 $token = null;
-                $activeLink = $locked->publicLinks()->whereNull('revoked_at')->first();
 
-                if ($activeLink === null) {
-                    $token = self::generatePublicToken();
-                    $locked->publicLinks()->create([
-                        'token_hash' => hash('sha256', $token),
-                        'created_at' => $issuedAt,
-                    ]);
+                // Main-ссылка создаётся один раз при первом выпуске main-ветки.
+                if ($branch->is_main) {
+                    $activeMainLink = $locked->publicLinks()->whereNull('branch_id')->whereNull('revoked_at')->first();
+
+                    if ($activeMainLink === null) {
+                        $token = self::generatePublicToken();
+                        $locked->publicLinks()->create([
+                            'token' => $token,
+                            'token_hash' => hash('sha256', $token),
+                            'created_at' => $issuedAt,
+                        ]);
+                    }
                 }
 
                 Audit::record($actor, 'proposal.issued', $locked, [], [
                     'number' => $number,
                     'version' => $draft->version,
+                    'branch' => $branch->name,
                 ]);
 
                 return ['token' => $token];

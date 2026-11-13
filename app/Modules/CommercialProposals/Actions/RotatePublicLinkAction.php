@@ -8,9 +8,10 @@ use App\Support\Audit\Audit;
 use Illuminate\Support\Facades\DB;
 
 /**
- * Rotation публичной ссылки (план §9.3): старый token отзывается, создаётся
- * новый; полный новый token показывается один раз. Старая ссылка
- * перестаёт работать немедленно.
+ * Rotation основной (main) публичной ссылки: старый token отзывается,
+ * создаётся новый (хранится в БД, URL доступен всегда). Старая ссылка
+ * перестаёт работать немедленно. Ссылки веток (branch_id not null) не
+ * трогаем.
  */
 final class RotatePublicLinkAction
 {
@@ -23,7 +24,7 @@ final class RotatePublicLinkAction
             /** @var Proposal $locked */
             $locked = Proposal::query()->whereKey($proposal->id)->lockForUpdate()->firstOrFail();
 
-            $active = $locked->publicLinks()->whereNull('revoked_at')->lockForUpdate()->first();
+            $active = $locked->publicLinks()->whereNull('branch_id')->whereNull('revoked_at')->lockForUpdate()->first();
 
             if ($active !== null) {
                 $active->fill(['revoked_at' => now()]);
@@ -33,6 +34,7 @@ final class RotatePublicLinkAction
             $token = IssueProposalAction::generatePublicToken();
 
             $locked->publicLinks()->create([
+                'token' => $token,
                 'token_hash' => hash('sha256', $token),
                 'created_at' => now(),
             ]);

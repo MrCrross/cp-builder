@@ -88,8 +88,8 @@ it('creates a draft proposal without public access', function () {
 
     expect($proposal->status->value)->toBe('draft')
         ->and($proposal->owner_id)->toBe($actor->id)
-        ->and($proposal->draftVersion)->not->toBeNull()
-        ->and($proposal->draftVersion->version)->toBe(1)
+        ->and($proposal->draftOnBranch())->not->toBeNull()
+        ->and($proposal->draftOnBranch()->version)->toBe(1)
         ->and($proposal->publicLinks()->count())->toBe(0)
         ->and($proposal->number)->toBeNull();
 
@@ -119,7 +119,7 @@ it('creates a draft from template copying content', function () {
     ]);
 
     $proposal = (new CreateDraftProposalAction)->execute($actor, $template->id);
-    $version = $proposal->draftVersion;
+    $version = $proposal->draftOnBranch();
 
     expect($version->title)->toBe($template->default_title)
         ->and($version->items()->count())->toBe(1)
@@ -129,7 +129,7 @@ it('creates a draft from template copying content', function () {
 it('saves draft recalculating amounts and totals server-side', function () {
     $actor = actorWithRole('manager');
     $proposal = (new CreateDraftProposalAction)->execute($actor);
-    $version = $proposal->draftVersion;
+    $version = $proposal->draftOnBranch();
 
     $saved = (new SaveDraftAction)->execute($proposal, draftPayload());
 
@@ -189,7 +189,7 @@ it('rejects saving with stale lock version', function () {
     (new SaveDraftAction)->execute($proposal, draftPayload(['lock_version' => 1]));
 })->throws(ConflictHttpException::class);
 
-it('issues a draft atomically with number and one-time token', function () {
+it('issues a draft atomically with number and stored public token', function () {
     $actor = actorWithRole('manager');
     $proposal = (new CreateDraftProposalAction)->execute($actor);
     (new SaveDraftAction)->execute($proposal, draftPayload());
@@ -206,11 +206,11 @@ it('issues a draft atomically with number and one-time token', function () {
 
     $link = $proposal->publicLinks()->sole();
 
-    expect($link->token_hash)->toBe(hash('sha256', $token))
-        ->and($link->token_hash)->not->toBe($token) // в БД только hash
+    expect($link->token)->toBe($token) // полный токен хранится: ссылка доступна всегда
+        ->and($link->token_hash)->toBe(hash('sha256', $token)) // lookup — по hash
         ->and(strlen($token))->toBeGreaterThanOrEqual(43); // ≥256-bit base64url
 
-    $version = $proposal->issuedVersion;
+    $version = $proposal->mainVersion();
 
     expect($version)->not->toBeNull()
         ->and($version->state->value)->toBe('issued')
@@ -250,7 +250,7 @@ it('supersedes previous issued version on next issue', function () {
     (new SaveDraftAction)->execute($proposal, draftPayload());
     (new IssueProposalAction)->execute($actor, $proposal);
 
-    $v1 = $proposal->issuedVersion;
+    $v1 = $proposal->mainVersion();
 
     (new CreateNewDraftFromIssuedAction)->execute($actor, $proposal->refresh());
     (new SaveDraftAction)->execute($proposal->refresh(), draftPayload([
@@ -258,14 +258,14 @@ it('supersedes previous issued version on next issue', function () {
     ]));
 
     // Публичная страница ещё старая.
-    expect($proposal->refresh()->issuedVersion->title)->toBe('КП на разработку');
+    expect($proposal->refresh()->mainVersion()->title)->toBe('КП на разработку');
 
     (new IssueProposalAction)->execute($actor, $proposal->refresh());
 
     $proposal->refresh();
 
-    expect($proposal->issuedVersion->version)->toBe(2)
-        ->and($proposal->issuedVersion->title)->toBe('КП на разработку v2')
+    expect($proposal->mainVersion()->version)->toBe(2)
+        ->and($proposal->mainVersion()->title)->toBe('КП на разработку v2')
         ->and($v1->refresh()->state->value)->toBe('superseded');
 });
 
@@ -275,14 +275,14 @@ it('keeps public document unchanged until next issue', function () {
     (new SaveDraftAction)->execute($proposal, draftPayload());
     (new IssueProposalAction)->execute($actor, $proposal);
 
-    $issuedContent = $proposal->refresh()->issuedVersion->title;
+    $issuedContent = $proposal->refresh()->mainVersion()->title;
 
     (new CreateNewDraftFromIssuedAction)->execute($actor, $proposal->refresh());
     (new SaveDraftAction)->execute($proposal->refresh(), draftPayload(['title' => 'Полностью новое КП']));
 
-    expect($proposal->refresh()->issuedVersion->title)->toBe($issuedContent)
-        ->and($proposal->issuedVersion->items()->count())->toBe(2)
-        ->and($proposal->draftVersion->items()->count())->toBe(2);
+    expect($proposal->refresh()->mainVersion()->title)->toBe($issuedContent)
+        ->and($proposal->mainVersion()->items()->count())->toBe(2)
+        ->and($proposal->draftOnBranch()->items()->count())->toBe(2);
 });
 
 it('rotates public link revoking the old token', function () {
@@ -299,7 +299,9 @@ it('rotates public link revoking the old token', function () {
 
     expect($links)->toHaveCount(2)
         ->and($links[0]->revoked_at)->not->toBeNull()
+        ->and($links[0]->token)->toBe($oldToken) // отозванная строка хранит свой токен
         ->and($links[1]->revoked_at)->toBeNull()
+        ->and($links[1]->token)->toBe($newToken)
         ->and(PublicLink::query()->where('token_hash', hash('sha256', $oldToken))->sole()->revoked_at)->not->toBeNull();
 
     expect(AuditEntry::query()->where('action', 'proposal.link-rotated')->exists())->toBeTrue();
@@ -416,7 +418,7 @@ it('copies logo files into version snapshot at issue', function () {
     (new SaveDraftAction)->execute($proposal, draftPayload());
     (new IssueProposalAction)->execute($actor, $proposal);
 
-    $snapshot = $proposal->refresh()->issuedVersion->branding_snapshot;
+    $snapshot = $proposal->refresh()->mainVersion()->branding_snapshot;
     $snapPath = $snapshot['large_logo']['path'];
 
     expect($snapPath)->toStartWith("proposals/{$proposal->id}/v1/")

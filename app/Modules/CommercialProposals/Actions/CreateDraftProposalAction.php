@@ -8,6 +8,7 @@ use App\Modules\CommercialProposals\Domain\Enums\SectionType;
 use App\Modules\CommercialProposals\Domain\Enums\VersionState;
 use App\Modules\CommercialProposals\Domain\Services\ItemRowsBuilder;
 use App\Modules\CommercialProposals\Models\Proposal;
+use App\Modules\CommercialProposals\Models\ProposalBranch;
 use App\Modules\CommercialProposals\Models\ProposalTemplate;
 use App\Modules\CommercialProposals\Models\ProposalVersion;
 use App\Modules\CompanySettings\Contracts\BrandingSnapshotPort;
@@ -37,8 +38,15 @@ final class CreateDraftProposalAction
 
             $content = $template === null ? [] : $template->default_content;
 
+            $branch = ProposalBranch::query()->create([
+                'proposal_id' => $proposal->id,
+                'name' => 'main',
+                'is_main' => true,
+            ]);
+
             $version = ProposalVersion::query()->create([
                 'proposal_id' => $proposal->id,
+                'branch_id' => $branch->id,
                 'version' => 1,
                 'state' => VersionState::Draft,
                 'title' => $data['title'] ?? ($template === null ? 'Коммерческое предложение' : $template->default_title),
@@ -80,6 +88,8 @@ final class CreateDraftProposalAction
                     ));
                 }
             }
+
+            $branch->fill(['current_version_id' => $version->id])->save();
 
             Audit::record($actor, 'proposal.created', $proposal, [], [
                 'template' => $template?->name,

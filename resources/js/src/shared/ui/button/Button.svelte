@@ -44,6 +44,7 @@
         size = 'default',
         class: className = '',
         type = 'button',
+        href = undefined,
         ...rest
     }: {
         children?: Snippet<[AsChildProps]>;
@@ -52,6 +53,7 @@
         size?: Size;
         class?: string;
         type?: 'button' | 'submit' | 'reset';
+        href?: string;
         [key: string]: unknown;
     } = $props();
 
@@ -60,6 +62,10 @@
 
 {#if asChild}
     {@render children?.({ class: classes(), ...rest })}
+{:else if href !== undefined}
+    <a class={classes()} {href} {...rest}>
+        {@render children?.({})}
+    </a>
 {:else}
     <button class={classes()} type={type} {...rest}>
         {@render children?.({})}

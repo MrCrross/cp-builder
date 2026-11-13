@@ -15,6 +15,7 @@
     import Heading from '@/shared/ui/Heading.svelte';
     import { Badge } from '@/shared/ui/badge';
     import { Button } from '@/shared/ui/button';
+    import { Pagination } from '@/shared/ui/pagination';
     import { confirmDialog } from '@/shared/ui/confirm-dialog';
     import { Input } from '@/shared/ui/input';
     import { Label } from '@/shared/ui/label';
@@ -161,12 +162,6 @@
         });
         if (!ok) return;
         router.delete(destroyItem.url(item), { preserveScroll: true });
-    }
-
-    function decodeHtml(text: string): string {
-        const textarea = document.createElement('textarea');
-        textarea.innerHTML = text;
-        return textarea.value;
     }
 </script>
 
@@ -370,12 +365,6 @@
     </div>
 
     {#if items.links.length > 3}
-        <div class="flex flex-wrap gap-1">
-            {#each items.links as link (link.label)}
-                {#if link.url}
-                    <Button size="sm" variant={link.active ? 'default' : 'outline'} href={link.url}>{decodeHtml(link.label)}</Button>
-                {/if}
-            {/each}
-        </div>
+        <Pagination links={items.links} />
     {/if}
 </div>

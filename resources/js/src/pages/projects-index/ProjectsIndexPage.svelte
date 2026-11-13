@@ -12,6 +12,7 @@
     import AppHead from '@/shared/ui/AppHead.svelte';
     import Heading from '@/shared/ui/Heading.svelte';
     import { Button } from '@/shared/ui/button';
+    import { Pagination } from '@/shared/ui/pagination';
     import { confirmDialog } from '@/shared/ui/confirm-dialog';
     import { Input } from '@/shared/ui/input';
     import { Label } from '@/shared/ui/label';
@@ -60,12 +61,6 @@
         });
         if (!ok) return;
         router.delete(destroy.url(project), { preserveScroll: true });
-    }
-
-    function decodeHtml(text: string): string {
-        const textarea = document.createElement('textarea');
-        textarea.innerHTML = text;
-        return textarea.value;
     }
 </script>
 
@@ -167,12 +162,6 @@
     </div>
 
     {#if projects.links.length > 3}
-        <div class="flex flex-wrap gap-1">
-            {#each projects.links as link (link.label)}
-                {#if link.url}
-                    <Button size="sm" variant={link.active ? 'default' : 'outline'} href={link.url}>{decodeHtml(link.label)}</Button>
-                {/if}
-            {/each}
-        </div>
+        <Pagination links={projects.links} />
     {/if}
 </div>

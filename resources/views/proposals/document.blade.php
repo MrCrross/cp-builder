@@ -171,6 +171,8 @@
     <header class="doc-head">
         @if(!empty($branding['large_logo']) && !empty($publicToken))
             <img src="{{ route('kp.logo', ['token' => $publicToken, 'kind' => 'large_logo']) }}" alt="{{ $branding['name'] ?? '' }}">
+        @elseif(!empty($branding['large_logo']) && !empty($internalPreview ?? false))
+            <img src="{{ route('proposals.preview.logo', ['proposal' => $proposal, 'kind' => 'large_logo', 'branch' => $previewBranch ?? null]) }}" alt="{{ $branding['name'] ?? '' }}">
         @endif
         <div class="org">
             <div class="name">{{ $branding['name'] ?? '' }}</div>

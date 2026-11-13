@@ -23,8 +23,9 @@ use Illuminate\Support\Carbon;
  * @property Carbon|null $archived_at
  * @property Carbon $created_at
  * @property Carbon $updated_at
- * @property-read ProposalVersion|null $draftVersion
- * @property-read ProposalVersion|null $issuedVersion
+ * @property-read ProposalBranch|null $mainBranch
+ * @property-read ProposalVersion|null $mainVersion текущая версия main-ветки (то, что видно по основной ссылке)
+ * @property-read bool $has_draft псевдо-атрибут withExists (индекс реестра)
  */
 class Proposal extends Model
 {
@@ -76,19 +77,44 @@ class Proposal extends Model
     }
 
     /**
-     * @return HasOne<ProposalVersion, $this>
+     * Ветки версий (git-модель): версии живут в ветках, публичные ссылки
+     * резолвятся через current_version_id ветки.
+     *
+     * @return HasMany<ProposalBranch, $this>
      */
-    public function draftVersion(): HasOne
+    public function branches(): HasMany
     {
-        return $this->hasOne(ProposalVersion::class)->where('state', 'draft');
+        return $this->hasMany(ProposalBranch::class)->orderByDesc('is_main')->orderBy('name');
     }
 
     /**
-     * @return HasOne<ProposalVersion, $this>
+     * @return HasOne<ProposalBranch, $this>
      */
-    public function issuedVersion(): HasOne
+    public function mainBranch(): HasOne
     {
-        return $this->hasOne(ProposalVersion::class)->where('state', 'issued');
+        return $this->hasOne(ProposalBranch::class)->where('is_main', true);
+    }
+
+    /**
+     * Текущая версия main-ветки — документ по основной (main) ссылке.
+     */
+    public function mainVersion(): ?ProposalVersion
+    {
+        return $this->mainBranch?->currentVersion;
+    }
+
+    /**
+     * Черновик ветки: по умолчанию main.
+     */
+    public function draftOnBranch(?int $branchId = null): ?ProposalVersion
+    {
+        $branchId ??= $this->mainBranch?->id;
+
+        if ($branchId === null) {
+            return null;
+        }
+
+        return $this->versions()->where('branch_id', $branchId)->where('state', 'draft')->first();
     }
 
     /**

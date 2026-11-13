@@ -19,13 +19,15 @@ final class DraftCatalogDiffAction
     /**
      * @return list<array{position: int, catalog_item_id: int, name: array{current: string, catalog: string}, unit: array{current: ?string, catalog: ?string}, unit_price: array{current: string, catalog: string}, changed: bool}>
      */
-    public function execute(Proposal $proposal): array
+    public function execute(Proposal $proposal, ?int $branchId = null): array
     {
-        $version = $proposal->draftVersion()->with('items')->first();
+        $version = $proposal->draftOnBranch($branchId);
 
         if ($version === null) {
             return [];
         }
+
+        $version->load('items');
 
         $linked = $version->items->filter(fn ($item) => $item->catalog_item_id !== null)->values();
 

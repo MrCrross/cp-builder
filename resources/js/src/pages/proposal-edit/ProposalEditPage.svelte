@@ -28,7 +28,6 @@
     import {
         formatMoney,
         type CatalogDiffEntry,
-        type IssuedFlash,
         type ProposalEditPayload,
         type ProposalItemInput,
         type ProposalSectionInput,
@@ -46,6 +45,7 @@
         type SectionType,
     } from './blocks';
     import SectionCard from './SectionCard.svelte';
+    import VersionsPanel from './VersionsPanel.svelte';
     import StagesBlock from './StagesBlock.svelte';
     import RichTextBlock from './RichTextBlock.svelte';
     import TableBlock from './TableBlock.svelte';
@@ -232,7 +232,7 @@
 
     async function showCatalogDiff() {
         if (!proposal) return;
-        const response = await fetch(catalogDiff.url(proposal), { headers: { Accept: 'application/json' } });
+        const response = await fetch(`${catalogDiff.url(proposal)}?branch_id=${proposal.draft?.branch_id ?? ''}`, { headers: { Accept: 'application/json' } });
         if (!response.ok) return;
         const data = (await response.json()) as { diff: CatalogDiffEntry[] };
         diffEntries = data.diff;
@@ -240,7 +240,7 @@
 
     function applyCatalogRefresh() {
         if (!proposal) return;
-        router.post(refreshCatalog.url(proposal), {}, { preserveScroll: true });
+        router.post(refreshCatalog.url(proposal), { branch_id: proposal.draft?.branch_id }, { preserveScroll: true });
         diffEntries = null;
     }
 
@@ -334,18 +334,8 @@
         overIndex = null;
     }
 
-    // -- Одноразовая ссылка / несохранённые изменения ----------------------------
-    // Flash приходит событием router (Inertia отдаёт его один раз и не хранит
-    // в history state), а не через page.props — как и тосты в flash-toast.ts.
+    // -- Несохранённые изменения -------------------------------------------------
     onMount(() => {
-        const offFlash = router.on('flash', (event) => {
-            const issued = (event as CustomEvent<{ flash?: { issued?: IssuedFlash | null } }>).detail?.flash?.issued;
-
-            if (issued) {
-                alert(`Публичная ссылка (показывается один раз):\n\n${issued.url}\n\nСкопируйте её сейчас. При утрате — замените ссылку.`);
-            }
-        });
-
         const offBefore = router.on('before', (event) => {
             if (!dirty || !proposal) return;
             // Сохранение/выпуск — не уход со страницы, подтверждение не нужно
@@ -369,7 +359,6 @@
         });
 
         return () => {
-            offFlash();
             offBefore();
         };
     });
@@ -394,6 +383,7 @@
             manager_phone: managerPhone,
             note,
             project_id: projectId === '' ? null : projectId,
+            branch_id: proposal?.draft?.branch_id ?? null,
             lock_version: proposal?.draft?.lock_version ?? 1,
             sections: sections.map((section) => ({
                 type: section.type,
@@ -447,7 +437,7 @@
     async function saveAndIssue() {
         const ok = await confirmDialog({
             title: 'Выпустить КП?',
-            description: 'Создастся публичный документ и одноразовая ссылка.',
+            description: 'Создастся публичный документ. Публичная ссылка доступна в панели «Версии и ветки».',
             confirmText: 'Сохранить и выпустить',
         });
         if (!ok || !proposal) return;
@@ -455,7 +445,7 @@
         router.put(update.url(proposal), buildPayload(), {
             preserveScroll: true,
             onError: () => onConflict(),
-            onSuccess: () => router.post(issue.url(proposal), {}, { preserveScroll: true }),
+            onSuccess: () => router.post(issue.url(proposal), { branch_id: proposal.draft?.branch_id }, { preserveScroll: true }),
         });
     }
 
@@ -479,7 +469,8 @@
             confirmText: 'Создать',
         });
         if (!ok) return;
-        router.post(newDraft.url(proposal), {});
+        const branchId = proposal.branches.find((branch) => branch.name === proposal.active_branch)?.id;
+        router.post(newDraft.url(proposal), { branch_id: branchId }, { preserveScroll: true });
     }
 
     async function rotatePublicLink() {
@@ -526,17 +517,21 @@
         <Heading
             variant="small"
             title={proposal ? `КП ${proposal.number ?? 'без номера'}` : 'Новое коммерческое предложение'}
-            description={proposal?.issued ? `Действующая версия v${proposal.issued.version}.` : 'Черновик не публикуется, пока не выпущен.'}
+            description={proposal?.current_version ? `Текущая версия v${proposal.current_version.version}.` : 'Черновик не публикуется, пока не выпущен.'}
         />
         {#if proposal}
             <div class="flex items-center gap-2">
                 <Badge variant={proposal.status === 'issued' ? 'default' : 'secondary'}>
                     {proposal.status === 'draft' ? 'Черновик' : proposal.status === 'issued' ? 'Выпущено' : 'Архив'}
                 </Badge>
-                <Button variant="outline" href={proposal.preview_url} target="_blank">Просмотр</Button>
+                <Button variant="outline" href={proposal.preview_url ?? undefined} target="_blank">Просмотр</Button>
             </div>
         {/if}
     </div>
+
+    {#if proposal}
+        <VersionsPanel {proposal} {canEdit} />
+    {/if}
 
     {#if !proposal}
         <div class="flex max-w-md items-end gap-2">
@@ -558,10 +553,10 @@
         </div>
     {:else if !proposal.draft}
         <div class="space-y-4 rounded-lg border border-line p-6">
-            {#if proposal.issued}
+            {#if proposal.current_version}
                 <p class="text-sm text-muted-foreground">
-                    Действующая версия v{proposal.issued.version}. Публичная ссылка активна
-                    (URL показывался один раз при выпуске; при утрате — замените ссылку).
+                    Текущая версия v{proposal.current_version.version}. Публичная ссылка активна
+                    и доступна для копирования в панели «Версии и ветки».
                 </p>
                 <div class="flex gap-2">
                     {#if canEdit && proposal.status === 'issued'}

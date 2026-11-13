@@ -7,9 +7,10 @@
 </script>
 
 <script lang="ts">
-    import { Form, router } from '@inertiajs/svelte';
+    import { Form } from '@inertiajs/svelte';
     import AppHead from '@/shared/ui/AppHead.svelte';
     import { Button } from '@/shared/ui/button';
+    import { Pagination } from '@/shared/ui/pagination';
     import { Input } from '@/shared/ui/input';
     import { Label } from '@/shared/ui/label';
     import { index } from '@/routes/admin/audit';
@@ -194,24 +195,6 @@
     </div>
 
     {#if entries.last_page > 1}
-        <div
-            class="flex items-center justify-between text-sm text-muted-foreground"
-        >
-            <span>
-                {entries.from}–{entries.to} из {entries.total}
-            </span>
-            <div class="flex gap-2">
-                {#each entries.links as link (link.label)}
-                    <Button
-                        variant={link.active ? 'default' : 'outline'}
-                        size="sm"
-                        disabled={link.url === null}
-                        onclick={() => link.url && router.get(link.url)}
-                    >
-                        {@html link.label}
-                    </Button>
-                {/each}
-            </div>
-        </div>
+        <Pagination links={entries.links} from={entries.from} to={entries.to} total={entries.total} />
     {/if}
 </div>

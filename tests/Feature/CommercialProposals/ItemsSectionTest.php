@@ -163,7 +163,7 @@ it('refreshes catalog-linked rows inside items sections syncing payload and enab
 
     ['updated' => $updated] = app(RefreshDraftItemsFromCatalogAction::class)->execute($actor, $proposal);
 
-    $version = $proposal->draftVersion->refresh();
+    $version = $proposal->draftOnBranch()->refresh();
     $section = $version->sections()->where('enabled', true)->sole();
 
     expect($updated)->toBe(1)
@@ -192,7 +192,7 @@ it('creates snapshot rows from template items sections', function () {
 
     $proposal = (new CreateDraftProposalAction)->execute($actor, $template->id);
 
-    $version = $proposal->draftVersion;
+    $version = $proposal->draftOnBranch();
 
     expect($version->items()->count())->toBe(1)
         ->and($version->items()->sole()->amount_min)->toBe('1400.00')

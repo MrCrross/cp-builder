@@ -14,6 +14,7 @@
     import Heading from '@/shared/ui/Heading.svelte';
     import { Badge } from '@/shared/ui/badge';
     import { Button } from '@/shared/ui/button';
+    import { Pagination } from '@/shared/ui/pagination';
     import { confirmDialog } from '@/shared/ui/confirm-dialog';
     import { formatMoney, type ImportJobDetail, type ImportRowActionValue, type ImportRowItem } from '@/shared/api';
 
@@ -89,12 +90,6 @@
         if (errorsOnly) params.set('errors', '1');
         const query = params.toString();
         return job ? `${importsIndex.url()}/${job.id}${query ? `?${query}` : ''}` : importsIndex.url();
-    }
-
-    function decodeHtml(text: string): string {
-        const textarea = document.createElement('textarea');
-        textarea.innerHTML = text;
-        return textarea.value;
     }
 </script>
 
@@ -246,13 +241,7 @@
     </div>
 
     {#if rows.links.length > 3}
-        <div class="flex flex-wrap gap-1">
-            {#each rows.links as link (link.label)}
-                {#if link.url}
-                    <Button size="sm" variant={link.active ? 'default' : 'outline'} href={link.url}>{decodeHtml(link.label)}</Button>
-                {/if}
-            {/each}
-        </div>
+        <Pagination links={rows.links} />
     {/if}
 </div>
 {/if}

@@ -26,7 +26,7 @@ final class DeleteDraftProposalAction
                 throw new ConflictHttpException('Удалить можно только никогда не выпускавшийся черновик. Архивируйте документ.');
             }
 
-            $title = $locked->draftVersion()->value('title');
+            $title = $locked->versions()->where('state', 'draft')->value('title');
 
             Audit::record($actor, 'proposal.deleted', null, [], [
                 'title' => $title ?? ('#'.$locked->id),

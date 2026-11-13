@@ -42,6 +42,9 @@ export interface ProposalSectionInput {
 }
 
 export interface ProposalDraftData {
+    id: number;
+    branch_id: number;
+    branch_name: string;
     lock_version: number;
     title: string;
     subtitle: string | null;
@@ -57,12 +60,25 @@ export interface ProposalDraftData {
     sections: ProposalSectionInput[];
 }
 
-export interface ProposalIssuedData {
+export interface ProposalVersionData {
+    id: number;
     version: number;
+    state: 'draft' | 'issued' | 'superseded';
     title: string;
     issued_at: string | null;
     total_min: string;
     total_max: string;
+}
+
+export interface ProposalBranchData {
+    id: number;
+    name: string;
+    is_main: boolean;
+    has_public_link: boolean;
+    /** Публичный URL ветки; null — ссылки нет или токен старой ссылки не хранился (нужен rotate). */
+    public_url: string | null;
+    current_version: ProposalVersionData | null;
+    draft_version: { id: number } | null;
 }
 
 export interface ProposalEditPayload {
@@ -72,9 +88,22 @@ export interface ProposalEditPayload {
     template_id: number | null;
     project_id: number | null;
     has_public_link: boolean;
-    preview_url: string;
+    /** Публичный URL основной ссылки; null — ссылки нет или токен старой ссылки не хранился (нужен rotate). */
+    public_url: string | null;
+    preview_url: string | null;
+    active_branch: string | null;
+    branches: ProposalBranchData[];
+    versions: ProposalVersionListItem[];
     draft: ProposalDraftData | null;
-    issued: ProposalIssuedData | null;
+    current_version: ProposalVersionData | null;
+}
+
+/** Версия в списке для форков: id + номер + ветка-владелец. */
+export interface ProposalVersionListItem {
+    id: number;
+    version: number;
+    state: 'draft' | 'issued' | 'superseded';
+    branch_name: string;
 }
 
 export interface ProposalTemplateOption {
@@ -89,11 +118,6 @@ export interface ProposalTemplateListItem {
     description: string | null;
     default_title: string;
     active: boolean;
-}
-
-export interface IssuedFlash {
-    url: string;
-    token: string;
 }
 
 /** Отличие snapshot-строки черновика от актуального справочника. */
