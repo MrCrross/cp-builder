@@ -11,8 +11,6 @@ import { expect, loginAs, test } from './helpers';
 test('import: upload → preview → apply → rerun idempotent', async ({
     page,
 }, testInfo) => {
-    page.on('dialog', (dialog) => dialog.accept());
-
     const stamp = Date.now().toString(36);
     const firstName = `Часы пример кварцевые ${stamp}`;
     const secondName = `ПримерБренд PB-200 ${stamp}`;
@@ -51,6 +49,7 @@ test('import: upload → preview → apply → rerun idempotent', async ({
 
     // -- Apply -------------------------------------------------------------------
     await page.getByTestId('import-apply').click();
+    await page.getByTestId('confirm-dialog-confirm').click();
     await expect(
         page.getByText('Завершён', { exact: false }).first(),
     ).toBeVisible({ timeout: 30_000 });

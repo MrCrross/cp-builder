@@ -21,7 +21,7 @@
     import InputError from '@/shared/ui/InputError.svelte';
     import { Badge } from '@/shared/ui/badge';
     import { Button } from '@/shared/ui/button';
-    import ConfirmDialog from '@/shared/ui/confirm-dialog/ConfirmDialog.svelte';
+    import { confirmDialog } from '@/shared/ui/confirm-dialog';
     import { Input } from '@/shared/ui/input';
     import { Label } from '@/shared/ui/label';
     import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/shared/ui/dropdown-menu';
@@ -286,10 +286,16 @@
         openMap = [...openMap, true];
     }
 
-    function removeSection(index: number) {
+    async function removeSection(index: number) {
         const section = sections[index];
-        if (sectionHasContent(section) && !confirm(`Удалить блок «${sectionLabels[section.type]}»? Введённые данные будут потеряны.`)) {
-            return;
+        if (sectionHasContent(section)) {
+            const ok = await confirmDialog({
+                title: `Удалить блок «${sectionLabels[section.type]}»?`,
+                description: 'Введённые данные будут потеряны.',
+                variant: 'danger',
+                confirmText: 'Удалить',
+            });
+            if (!ok) return;
         }
         sections = sections.filter((_, i) => i !== index);
         openMap = openMap.filter((_, i) => i !== index);
@@ -344,9 +350,22 @@
             if (!dirty || !proposal) return;
             // Сохранение/выпуск — не уход со страницы, подтверждение не нужно
             if (event.detail.visit.url.toString().includes(`/proposals/${proposal.id}`)) return;
-            if (!window.confirm('Есть несохранённые изменения. Покинуть страницу без сохранения?')) {
-                event.preventDefault();
-            }
+            event.preventDefault();
+            const visit = event.detail.visit;
+            const pending: PendingVisit = {
+                url: visit.url.toString(),
+                method: visit.method,
+                data: visit.data as Record<string, import('@inertiajs/core').FormDataConvertible>,
+            };
+            void confirmDialog({
+                title: 'Покинуть страницу?',
+                description: 'Есть несохранённые изменения. Покинуть страницу без сохранения?',
+                confirmText: 'Покинуть',
+            }).then((ok) => {
+                if (ok) {
+                    router.visit(pending.url, { method: pending.method, data: pending.data });
+                }
+            });
         });
 
         return () => {
@@ -425,16 +444,71 @@
 
     const dirty = $derived(snapshot() !== baseline);
 
-    let issueDialogOpen = $state(false);
-
-    function saveAndIssue() {
-        if (!proposal) return;
+    async function saveAndIssue() {
+        const ok = await confirmDialog({
+            title: 'Выпустить КП?',
+            description: 'Создастся публичный документ и одноразовая ссылка.',
+            confirmText: 'Сохранить и выпустить',
+        });
+        if (!ok || !proposal) return;
 
         router.put(update.url(proposal), buildPayload(), {
             preserveScroll: true,
             onError: () => onConflict(),
             onSuccess: () => router.post(issue.url(proposal), {}, { preserveScroll: true }),
         });
+    }
+
+    async function deleteDraft() {
+        if (!proposal) return;
+        const ok = await confirmDialog({
+            title: 'Удалить черновик?',
+            description: 'Действие необратимо.',
+            variant: 'danger',
+            confirmText: 'Удалить',
+        });
+        if (!ok) return;
+        router.delete(destroy.url(proposal));
+    }
+
+    async function createNewVersion() {
+        if (!proposal) return;
+        const ok = await confirmDialog({
+            title: 'Создать новую версию?',
+            description: 'Новый черновик будет создан из копии текущей версии.',
+            confirmText: 'Создать',
+        });
+        if (!ok) return;
+        router.post(newDraft.url(proposal), {});
+    }
+
+    async function rotatePublicLink() {
+        if (!proposal) return;
+        const ok = await confirmDialog({
+            title: 'Заменить публичную ссылку?',
+            description: 'Старая ссылка перестанет работать.',
+            confirmText: 'Заменить',
+        });
+        if (!ok) return;
+        router.post(rotateLink.url(proposal), {});
+    }
+
+    async function archiveProposal() {
+        if (!proposal) return;
+        const ok = await confirmDialog({
+            title: 'Архивировать КП?',
+            description: 'Публичная ссылка будет закрыта.',
+            variant: 'danger',
+            confirmText: 'Архивировать',
+        });
+        if (!ok) return;
+        router.post(archive.url(proposal), {});
+    }
+
+    interface PendingVisit {
+        url: string;
+        method: import('@inertiajs/core').Method;
+        data: Record<string, import('@inertiajs/core').FormDataConvertible>;
     }
 
     function onConflict() {
@@ -491,15 +565,15 @@
                 </p>
                 <div class="flex gap-2">
                     {#if canEdit && proposal.status === 'issued'}
-                        <Button onclick={() => { if (confirm('Создать новый черновик из копии текущей версии?')) router.post(newDraft.url(proposal), {}); }}>
+                        <Button onclick={createNewVersion}>
                             Новая версия
                         </Button>
                     {/if}
                     {#if proposal.status === 'issued'}
-                        <Button variant="outline" onclick={() => { if (confirm('Заменить публичную ссылку? Старая перестанет работать.')) router.post(rotateLink.url(proposal), {}); }}>
+                        <Button variant="outline" onclick={rotatePublicLink}>
                             Заменить ссылку
                         </Button>
-                        <Button variant="ghost" onclick={() => { if (confirm('Архивировать КП? Ссылка будет закрыта.')) router.post(archive.url(proposal), {}); }}>
+                        <Button variant="ghost" onclick={archiveProposal}>
                             В архив
                         </Button>
                     {:else if proposal.status === 'archived'}
@@ -738,7 +812,7 @@
                         </Button>
                     {/if}
                     {#if canIssue}
-                        <Button type="button" variant="outline" disabled={processing} onclick={() => (issueDialogOpen = true)} data-test="issue-proposal">
+                        <Button type="button" variant="outline" disabled={processing} onclick={saveAndIssue} data-test="issue-proposal">
                             Сохранить и выпустить КП
                         </Button>
                     {/if}
@@ -747,18 +821,11 @@
                     {/if}
                     {#if canEdit}
                         <Button type="button" variant="ghost" disabled={processing}
-                            onclick={() => { if (confirm('Удалить черновик? Действие необратимо.')) router.delete(destroy.url(proposal)); }}>
+                            onclick={deleteDraft}>
                             Удалить черновик
                         </Button>
                     {/if}
                 </div>
-                <ConfirmDialog
-                    bind:open={issueDialogOpen}
-                    title="Выпустить КП?"
-                    description="Создастся публичный документ и одноразовая ссылка."
-                    confirmText="Сохранить и выпустить"
-                    onconfirm={saveAndIssue}
-                />
             {/snippet}
         </Form>
     {/if}

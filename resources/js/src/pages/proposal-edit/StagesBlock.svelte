@@ -2,6 +2,7 @@
     import { Input } from '@/shared/ui/input';
     import InputError from '@/shared/ui/InputError.svelte';
     import { Button } from '@/shared/ui/button';
+    import { confirmDialog } from '@/shared/ui/confirm-dialog';
     import type { Stage } from './blocks';
     import Copy from '@lucide/svelte/icons/copy';
     import ArrowUp from '@lucide/svelte/icons/arrow-up';
@@ -24,10 +25,17 @@
         stages = [...stages, { title: '', duration: '' }];
     }
 
-    function removeStage(index: number) {
+    async function removeStage(index: number) {
         const stage = stages[index];
         const filled = stage.title.trim() !== '' || stage.duration.trim() !== '';
-        if (filled && !confirm(`Удалить этап «${stage.title || stage.duration}»?`)) return;
+        if (filled) {
+            const ok = await confirmDialog({
+                title: `Удалить этап «${stage.title || stage.duration}»?`,
+                variant: 'danger',
+                confirmText: 'Удалить',
+            });
+            if (!ok) return;
+        }
         stages = stages.filter((_, i) => i !== index);
     }
 

@@ -12,6 +12,7 @@
     import AppHead from '@/shared/ui/AppHead.svelte';
     import Heading from '@/shared/ui/Heading.svelte';
     import { Button } from '@/shared/ui/button';
+    import { confirmDialog } from '@/shared/ui/confirm-dialog';
     import { Input } from '@/shared/ui/input';
     import { Label } from '@/shared/ui/label';
     import type { ProjectListItem } from '@/shared/api';
@@ -50,8 +51,14 @@
         );
     }
 
-    function removeProject(project: ProjectListItem) {
-        if (!confirm(`Удалить проект «${project.name}»? Проект с КП удалить нельзя.`)) return;
+    async function removeProject(project: ProjectListItem) {
+        const ok = await confirmDialog({
+            title: `Удалить проект «${project.name}»?`,
+            description: 'Проект с КП удалить нельзя.',
+            variant: 'danger',
+            confirmText: 'Удалить',
+        });
+        if (!ok) return;
         router.delete(destroy.url(project), { preserveScroll: true });
     }
 

@@ -4,6 +4,7 @@
     import AppShell from '@/app/ui/AppShell.svelte';
     import AppSidebar from '@/app/ui/AppSidebar.svelte';
     import AppSidebarHeader from '@/app/ui/AppSidebarHeader.svelte';
+    import { ConfirmHost } from '@/shared/ui/confirm-dialog';
     import { Toaster } from '@/shared/ui/sonner';
     import type { BreadcrumbItem } from '@/app/lib/navigation';
 
@@ -23,4 +24,5 @@
         {@render children?.()}
     </AppContent>
     <Toaster />
+    <ConfirmHost />
 </AppShell>

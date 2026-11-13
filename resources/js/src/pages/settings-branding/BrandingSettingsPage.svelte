@@ -14,6 +14,7 @@
     import Heading from '@/shared/ui/Heading.svelte';
     import InputError from '@/shared/ui/InputError.svelte';
     import { Button } from '@/shared/ui/button';
+    import { confirmDialog } from '@/shared/ui/confirm-dialog';
     import { Input } from '@/shared/ui/input';
     import { Label } from '@/shared/ui/label';
 
@@ -54,10 +55,13 @@
         );
     }
 
-    function removeLogo(kind: 'large_logo' | 'small_logo') {
-        if (!confirm(kind === 'large_logo' ? 'Удалить большой логотип?' : 'Удалить малый логотип?')) {
-            return;
-        }
+    async function removeLogo(kind: 'large_logo' | 'small_logo') {
+        const ok = await confirmDialog({
+            title: kind === 'large_logo' ? 'Удалить большой логотип?' : 'Удалить малый логотип?',
+            variant: 'danger',
+            confirmText: 'Удалить',
+        });
+        if (!ok) return;
 
         router.delete(destroy.url({ kind }), { preserveScroll: true });
     }

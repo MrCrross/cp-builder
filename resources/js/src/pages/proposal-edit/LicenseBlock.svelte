@@ -2,6 +2,7 @@
     import { Input } from '@/shared/ui/input';
     import InputError from '@/shared/ui/InputError.svelte';
     import { Button } from '@/shared/ui/button';
+    import { confirmDialog } from '@/shared/ui/confirm-dialog';
     import type { LicenseItem } from './blocks';
     import Copy from '@lucide/svelte/icons/copy';
     import ArrowUp from '@lucide/svelte/icons/arrow-up';
@@ -24,10 +25,17 @@
         items = [...items, { name: '', period: 'в месяц', price: '0.00' }];
     }
 
-    function removeItem(index: number) {
+    async function removeItem(index: number) {
         const item = items[index];
         const filled = item.name.trim() !== '' || item.price.trim() !== '';
-        if (filled && !confirm(`Удалить услугу «${item.name || item.period}»?`)) return;
+        if (filled) {
+            const ok = await confirmDialog({
+                title: `Удалить услугу «${item.name || item.period}»?`,
+                variant: 'danger',
+                confirmText: 'Удалить',
+            });
+            if (!ok) return;
+        }
         items = items.filter((_, i) => i !== index);
     }
 

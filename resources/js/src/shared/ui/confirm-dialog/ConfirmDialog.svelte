@@ -10,10 +10,11 @@
     } from '@/shared/ui/dialog';
 
     /**
-     * Переиспользуемое модальное окно подтверждения (замена window.confirm).
-     * Пропсы title/description покрывают простой случай; через snippet children
-     * можно передать произвольное содержимое (формы, компоненты), через
-     * snippet footer — свои кнопки. Управление видимостью — bind:open.
+     * Переиспользуемое модальное окно подтверждения. Для типового случая
+     * «спросить и продолжить» используйте программный сервис confirmDialog()
+     * из ./confirm.svelte — этот компонент нужен только как презентационный
+     * слой (рендерит его ConfirmHost) или для кастомного содержимого.
+     * Управление видимостью — bind:open.
      */
     let {
         open = $bindable(false),
@@ -24,6 +25,7 @@
         cancelText = 'Отмена',
         size = 'md',
         onconfirm,
+        oncancel,
         children,
         footer,
     }: {
@@ -35,6 +37,7 @@
         cancelText?: string;
         size?: 'sm' | 'md' | 'lg';
         onconfirm?: () => void;
+        oncancel?: () => void;
         children?: Snippet;
         footer?: Snippet;
     } = $props();
@@ -45,13 +48,23 @@
         lg: 'max-w-2xl',
     };
 
+    let confirming = false;
+
     function confirmAction(): void {
+        confirming = true;
         onconfirm?.();
         open = false;
+        confirming = false;
+    }
+
+    function handleOpenChange(value: boolean): void {
+        if (!value && !confirming) {
+            oncancel?.();
+        }
     }
 </script>
 
-<Dialog bind:open>
+<Dialog bind:open onOpenChange={handleOpenChange}>
     <DialogContent class={sizes[size]}>
         <DialogTitle>{title}</DialogTitle>
         {#if description}

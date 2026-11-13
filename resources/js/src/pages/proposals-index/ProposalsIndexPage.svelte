@@ -14,6 +14,7 @@
     import Heading from '@/shared/ui/Heading.svelte';
     import { Badge } from '@/shared/ui/badge';
     import { Button } from '@/shared/ui/button';
+    import { confirmDialog } from '@/shared/ui/confirm-dialog';
     import { Input } from '@/shared/ui/input';
     import { formatMoney, type ProposalListItem, type ProposalStatus } from '@/shared/api';
 
@@ -34,23 +35,45 @@
         archived: 'Архив',
     };
 
-    function removeProposal(item: ProposalListItem) {
-        if (!confirm(`Удалить черновик «${item.title ?? 'без названия'}»? Действие необратимо.`)) return;
+    async function removeProposal(item: ProposalListItem) {
+        const ok = await confirmDialog({
+            title: `Удалить черновик «${item.title ?? 'без названия'}»?`,
+            description: 'Действие необратимо.',
+            variant: 'danger',
+            confirmText: 'Удалить',
+        });
+        if (!ok) return;
         router.delete(destroy.url(item), { preserveScroll: true });
     }
 
-    function doIssue(item: ProposalListItem) {
-        if (!confirm(`Выпустить КП «${item.title ?? ''}»? Публичный документ будет создан.`)) return;
+    async function doIssue(item: ProposalListItem) {
+        const ok = await confirmDialog({
+            title: `Выпустить КП «${item.title ?? ''}»?`,
+            description: 'Публичный документ будет создан.',
+            confirmText: 'Выпустить',
+        });
+        if (!ok) return;
         router.post(issue.url(item), {}, { preserveScroll: true });
     }
 
-    function doArchive(item: ProposalListItem) {
-        if (!confirm('Архивировать КП? Публичная ссылка будет закрыта.')) return;
+    async function doArchive(item: ProposalListItem) {
+        const ok = await confirmDialog({
+            title: 'Архивировать КП?',
+            description: 'Публичная ссылка будет закрыта.',
+            variant: 'danger',
+            confirmText: 'Архивировать',
+        });
+        if (!ok) return;
         router.post(archive.url(item), {}, { preserveScroll: true });
     }
 
-    function doRotate(item: ProposalListItem) {
-        if (!confirm('Заменить публичную ссылку? Старая ссылка перестанет работать.')) return;
+    async function doRotate(item: ProposalListItem) {
+        const ok = await confirmDialog({
+            title: 'Заменить публичную ссылку?',
+            description: 'Старая ссылка перестанет работать.',
+            confirmText: 'Заменить',
+        });
+        if (!ok) return;
         router.post(rotateLink.url(item), {}, { preserveScroll: true });
     }
 

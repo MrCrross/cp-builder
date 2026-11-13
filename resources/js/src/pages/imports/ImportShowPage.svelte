@@ -14,6 +14,7 @@
     import Heading from '@/shared/ui/Heading.svelte';
     import { Badge } from '@/shared/ui/badge';
     import { Button } from '@/shared/ui/button';
+    import { confirmDialog } from '@/shared/ui/confirm-dialog';
     import { formatMoney, type ImportJobDetail, type ImportRowActionValue, type ImportRowItem } from '@/shared/api';
 
     interface PaginatedRows {
@@ -60,15 +61,25 @@
         if (pollTimer) clearInterval(pollTimer);
     });
 
-    function applyImport() {
+    async function applyImport() {
         if (!job) return;
-        if (!confirm(`Применить импорт к каталогу? Добавит: ${job.rows_add}, изменит: ${job.rows_change}, отключит: ${job.rows_delete}. Это не изменит уже выпущенные КП.`)) return;
+        const ok = await confirmDialog({
+            title: 'Применить импорт к каталогу?',
+            description: `Добавит: ${job.rows_add}, изменит: ${job.rows_change}, отключит: ${job.rows_delete}. Это не изменит уже выпущенные КП.`,
+            confirmText: 'Применить',
+        });
+        if (!ok) return;
         router.post(importsConfirm.url(job), {}, { preserveScroll: true });
     }
 
-    function cancelImport() {
+    async function cancelImport() {
         if (!job) return;
-        if (!confirm('Отменить импорт? Каталог не будет изменён.')) return;
+        const ok = await confirmDialog({
+            title: 'Отменить импорт?',
+            description: 'Каталог не будет изменён.',
+            confirmText: 'Отменить импорт',
+        });
+        if (!ok) return;
         router.post(importsCancel.url(job), {}, { preserveScroll: true });
     }
 

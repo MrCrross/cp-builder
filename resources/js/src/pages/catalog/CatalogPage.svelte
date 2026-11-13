@@ -15,6 +15,7 @@
     import Heading from '@/shared/ui/Heading.svelte';
     import { Badge } from '@/shared/ui/badge';
     import { Button } from '@/shared/ui/button';
+    import { confirmDialog } from '@/shared/ui/confirm-dialog';
     import { Input } from '@/shared/ui/input';
     import { Label } from '@/shared/ui/label';
     import { formatMoney, type CatalogCategoryListItem, type CatalogItemListItem } from '@/shared/api';
@@ -48,8 +49,14 @@
         });
     }
 
-    function removeCategory(category: CatalogCategoryListItem) {
-        if (!confirm(`Удалить категорию «${category.name}»? Категорию с позициями удалить нельзя.`)) return;
+    async function removeCategory(category: CatalogCategoryListItem) {
+        const ok = await confirmDialog({
+            title: `Удалить категорию «${category.name}»?`,
+            description: 'Категорию с позициями удалить нельзя.',
+            variant: 'danger',
+            confirmText: 'Удалить',
+        });
+        if (!ok) return;
         router.delete(destroyCategory.url(category), { preserveScroll: true });
     }
 
@@ -145,8 +152,14 @@
         );
     }
 
-    function removeItem(item: CatalogItemListItem) {
-        if (!confirm(`Удалить позицию «${item.name}»? Позицию из документов удалить нельзя — отключите её.`)) return;
+    async function removeItem(item: CatalogItemListItem) {
+        const ok = await confirmDialog({
+            title: `Удалить позицию «${item.name}»?`,
+            description: 'Позицию из документов удалить нельзя — отключите её.',
+            variant: 'danger',
+            confirmText: 'Удалить',
+        });
+        if (!ok) return;
         router.delete(destroyItem.url(item), { preserveScroll: true });
     }
 

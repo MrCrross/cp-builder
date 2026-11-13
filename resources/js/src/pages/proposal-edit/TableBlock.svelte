@@ -1,6 +1,7 @@
 <script lang="ts">
     import { tick } from 'svelte';
     import { Button } from '@/shared/ui/button';
+    import { confirmDialog } from '@/shared/ui/confirm-dialog';
     import { Checkbox } from '@/shared/ui/checkbox';
     import { cn } from '@/shared/lib/utils';
     import { formatMoney } from '@/shared/api';
@@ -96,12 +97,18 @@
         payload = { ...payload, columns, rows };
     }
 
-    function deleteColumn(index: number) {
+    async function deleteColumn(index: number) {
         const column = payload.columns[index];
         const hasData =
             column.label.trim() !== '' || payload.rows.some((row) => (row[index] ?? '').trim() !== '');
-        if (hasData && !confirm(`Удалить колонку «${column.label || 'без названия'}»? Данные в ней будут потеряны.`)) {
-            return;
+        if (hasData) {
+            const ok = await confirmDialog({
+                title: `Удалить колонку «${column.label || 'без названия'}»?`,
+                description: 'Данные в ней будут потеряны.',
+                variant: 'danger',
+                confirmText: 'Удалить',
+            });
+            if (!ok) return;
         }
         payload = {
             ...payload,
@@ -145,9 +152,17 @@
         payload = { ...payload, rows };
     }
 
-    function deleteRow(index: number) {
+    async function deleteRow(index: number) {
         const filled = payload.rows[index].some((cell) => cell.trim() !== '');
-        if (filled && !confirm('Удалить строку? Введённые в ней данные будут потеряны.')) return;
+        if (filled) {
+            const ok = await confirmDialog({
+                title: 'Удалить строку?',
+                description: 'Введённые в ней данные будут потеряны.',
+                variant: 'danger',
+                confirmText: 'Удалить',
+            });
+            if (!ok) return;
+        }
         payload = { ...payload, rows: payload.rows.filter((_, i) => i !== index) };
     }
 

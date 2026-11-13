@@ -1,6 +1,7 @@
 <script lang="ts">
     import { formatMoney, type CatalogItemOption, type ProposalItemInput } from '@/shared/api';
     import { Button } from '@/shared/ui/button';
+    import { confirmDialog } from '@/shared/ui/confirm-dialog';
     import { Input } from '@/shared/ui/input';
     import InputError from '@/shared/ui/InputError.svelte';
     import { lineAmount } from './blocks';
@@ -51,10 +52,17 @@
         items = onlyPlaceholder ? picked : [...items, ...picked];
     }
 
-    function removeItem(index: number) {
+    async function removeItem(index: number) {
         const item = items[index];
         const filled = item.name.trim() !== '' || (item.unit_price.trim() !== '' && item.unit_price !== '0.00');
-        if (filled && !confirm(`Удалить позицию «${item.name || 'без названия'}»?`)) return;
+        if (filled) {
+            const ok = await confirmDialog({
+                title: `Удалить позицию «${item.name || 'без названия'}»?`,
+                variant: 'danger',
+                confirmText: 'Удалить',
+            });
+            if (!ok) return;
+        }
         items = items.filter((_, i) => i !== index);
     }
 

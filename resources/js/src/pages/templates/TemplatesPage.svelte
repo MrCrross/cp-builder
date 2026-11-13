@@ -13,6 +13,7 @@
     import Heading from '@/shared/ui/Heading.svelte';
     import { Badge } from '@/shared/ui/badge';
     import { Button } from '@/shared/ui/button';
+    import { confirmDialog } from '@/shared/ui/confirm-dialog';
     import { Input } from '@/shared/ui/input';
     import { Label } from '@/shared/ui/label';
     import type { ProposalTemplateListItem } from '@/shared/api';
@@ -37,8 +38,14 @@
         router.put(update.url(template), { name: template.name, default_title: template.default_title, active: !template.active }, { preserveScroll: true });
     }
 
-    function removeTemplate(template: ProposalTemplateListItem) {
-        if (!confirm(`Удалить шаблон «${template.name}»? Существующие КП сохранятся.`)) return;
+    async function removeTemplate(template: ProposalTemplateListItem) {
+        const ok = await confirmDialog({
+            title: `Удалить шаблон «${template.name}»?`,
+            description: 'Существующие КП сохранятся.',
+            variant: 'danger',
+            confirmText: 'Удалить',
+        });
+        if (!ok) return;
         router.delete(destroy.url(template), { preserveScroll: true });
     }
 </script>
