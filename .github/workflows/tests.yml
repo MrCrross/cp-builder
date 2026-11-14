@@ -22,7 +22,8 @@ jobs:
       - name: Setup PHP
         uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # v2
         with:
-          php-version: '8.3'
+          php-version: '8.5'
+          extensions: bcmath, curl, intl, mbstring, opcache, pdo_sqlite, pcntl, xml, zip
           tools: composer:v2
           coverage: none
 
@@ -31,7 +32,16 @@ jobs:
         with:
           node-version: '22'
 
+      - name: Install PHP dependencies
+        run: composer install --prefer-dist --no-interaction --optimize-autoloader
+
+      - name: Generate wayfinder routes
+        run: php artisan wayfinder:generate --with-form --no-interaction
+
       - name: Setup Application
+        env:
+          DB_CONNECTION: sqlite
+          DB_DATABASE: ':memory:'
         run: composer setup
 
       - name: Run CI Checks

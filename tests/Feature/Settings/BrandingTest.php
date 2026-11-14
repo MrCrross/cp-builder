@@ -8,6 +8,7 @@ use Database\Seeders\BaselineSeeder;
 use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Spatie\Permission\Models\Role;
 
@@ -233,7 +234,28 @@ it('serves logo file to administrator only', function () {
         ->assertForbidden();
 });
 
+function brandingSingleRowEnforced(): bool
+{
+    $connection = DB::connection();
+
+    if ($connection->getDriverName() === 'pgsql') {
+        return true;
+    }
+
+    if ($connection->getDriverName() !== 'sqlite') {
+        return false;
+    }
+
+    $ddl = DB::scalar("select sql from sqlite_master where type = 'table' and name = 'organization_settings'");
+
+    return is_string($ddl) && str_contains(strtolower($ddl), 'check');
+}
+
 it('keeps organization settings a singleton', function () {
+    if (! brandingSingleRowEnforced()) {
+        $this->markTestSkipped('CHECK (id = 1) не применён: SQLite < 3.53 (см. .ai/rules/backend.md); enforcement на pgsql покрыт миграцией.');
+    }
+
     OrganizationSettings::current();
 
     OrganizationSettings::query()->create(['id' => 2, 'name' => 'Второй']);

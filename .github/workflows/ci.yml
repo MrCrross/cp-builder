@@ -132,7 +132,9 @@ jobs:
             - name: Validate compose configuration
               env:
                   DB_PASSWORD: ci_placeholder
-              run: docker compose config --quiet
+              run: |
+                  cp .env.example .env
+                  docker compose config --quiet
 
             - name: Build production image (runtime target)
               run: docker build --target runtime -t cp-builder-web:ci .

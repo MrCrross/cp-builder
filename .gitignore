@@ -49,6 +49,8 @@ yarn-error.log
 /test-results/
 
 # Проектная документация (ADR, планы, ранбуки — локальные рабочие материалы)
-/docs/
+/docs/*
+# Реестр прямых зависимостей — в репо: CI-сверка scripts/verify-dependencies.mjs
+!/docs/dependencies.md
 # Настройки агентов: path-scoped правила `.ai/rules` — в репо; локальный MCP-конфиг — нет
 /.ai/mcp/
